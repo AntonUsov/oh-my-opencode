@@ -1,3 +1,9 @@
+## 2026-09-27 - Prometheus works on OpenCode Zen free models (#8763)
+
+Zen's free tier rejects every request that does not carry the `bash` tool ("OpenCode's free tier can only be used from within OpenCode"), and Prometheus sent none, so every Prometheus turn on a Zen free model failed while Sisyphus on the same model worked. OpenCode drops a tool from the request only when its last permission rule is a blanket `"*": "deny"` (`Permission.disabled`), so `applyToolConfig` now gives Prometheus `bash: { "**": "deny" }`: the tool stays in the request and OpenCode still denies every command.
+
+The tool list changes only where it has to. `chat.params` sets the per-message `tools.bash = false` switch for Prometheus unless the model is a Zen free one (provider `opencode`, zero input cost, the rule OpenCode itself uses), so on every other provider and on paid Zen models Prometheus sends exactly the tools it sent before. The `prometheus-md-only` hook now refuses any Prometheus `bash` call before it runs, so the refusal does not depend on how OpenCode parses the command: its shell tool skips the permission check when a command yields no command words.
+
 ## 2026-09-27 - Desktop engine binaries join the OmO release channels (#8893)
 
 The compiled OmO binaries stage `senpi-desktop-engine` inside their extracted runtime on supported macOS, glibc Linux x64 and Windows x64 hosts. The locator checks that runtime before the executable directory, while targets without an engine still report `native-unavailable`. The release workflow builds and uploads the engine binaries with checksums. An independent asynchronous API can acquire and verify the corresponding asset into a versioned cache for npm installs; hooking that API into the computer-use component follows the separate component PR.

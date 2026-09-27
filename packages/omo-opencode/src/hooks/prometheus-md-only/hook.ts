@@ -1,5 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { HOOK_NAME, BLOCKED_TOOLS, PLANNING_CONSULT_WARNING, PLANNING_CONTEXT_OPEN, PROMETHEUS_WORKFLOW_REMINDER } from "./constants"
+import { HOOK_NAME, BLOCKED_TOOLS, PROMETHEUS_BASH_BLOCKED_MESSAGE, PLANNING_CONSULT_WARNING, PLANNING_CONTEXT_OPEN, PROMETHEUS_WORKFLOW_REMINDER } from "./constants"
 import { log } from "../../shared/logger"
 import { replaceToolArgs } from "../../shared/replace-tool-args"
 import { getAgentDisplayName } from "../../shared/agent-display-names"
@@ -22,6 +22,14 @@ export function createPrometheusMdOnlyHook(ctx: PluginInput) {
       }
 
       const toolName = input.tool
+
+      if (toolName.toLowerCase() === "bash") {
+        log(`[${HOOK_NAME}] Blocked: Prometheus cannot run shell commands`, {
+          sessionID: input.sessionID,
+          agent: agentName,
+        })
+        throw new Error(PROMETHEUS_BASH_BLOCKED_MESSAGE)
+      }
 
       // Inject planning-only warning for task tools called by Prometheus
        if (TASK_TOOLS.includes(toolName)) {
