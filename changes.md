@@ -1,3 +1,7 @@
+## 2026-09-27 - Computer use honors the macOS canary policy (#8945)
+
+`computer.macos_canary` now reaches the native session and macOS backend instead of being discarded by the TypeScript request builder. The wire accepts `session` and `off`, defaults to `session`, and rejects unknown values. Backend reconstruction receives the current policy, including when a session is reconfigured. The engine schema and shipped OmO extension are regenerated.
+
 ## 2026-09-27 - macOS computer focus guard preserves the visible window (#8925)
 
 The macOS engine now captures the frontmost application's first on-screen layer-0 WindowServer window instead of assuming its AX-focused window is visually on top. Foreground delivery passes that captured window to SkyLight; when the foreground SPI is unavailable, it retains the existing public app-activation fallback. Synthetic window-order tests reject off-screen, non-normal-layer, and other-process windows. Window enumeration no longer cuts off after 48 windows, so a target behind many other windows remains addressable.

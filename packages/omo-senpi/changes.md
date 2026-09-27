@@ -1,3 +1,10 @@
+## computer use: forward the macOS canary policy (#8945)
+
+The shipped extension now passes `computer.macos_canary` through the desktop
+service to the native session. Explicit `off` reaches the macOS backend;
+omitting the setting keeps `session`. The native session validates the policy
+and applies it again when opening or reconfiguring a backend.
+
 ## local launcher: `omo update` points at bun
 
 `src/install/local-launcher.ts`: the generated local `omo` launcher (sibling-store installs) printed
