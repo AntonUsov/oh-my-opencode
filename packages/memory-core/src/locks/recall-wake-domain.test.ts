@@ -227,7 +227,7 @@ describe("recall-wake lock domain: counting FIFO lease", () => {
       expect(await headLease.release()).toBe(true)
 
       const follower = await withinMs(followerResult, "the follower waiter")
-      expect(follower.status).toBe("acquired")
+      // Surface the real rejection (code + stack) instead of only the status mismatch.
       if (follower.status !== "acquired") throw follower.error
       followerLease = follower.lease
       expect(await followerLease.release()).toBe(true)
