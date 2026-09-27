@@ -1,5 +1,8 @@
 import { isRecord } from "@oh-my-opencode/utils"
-import { isConfiguredPrometheusAgent, type AgentDisplayNameOverrides } from "../hooks/prometheus-md-only/agent-matcher"
+import { isPrometheusAgent } from "../hooks/prometheus-md-only/agent-matcher"
+import { getAgentDisplayName, stripAgentListSortPrefix } from "../shared/agent-display-names"
+
+export type AgentDisplayNameOverrides = Record<string, { displayName?: string } | undefined>
 
 // OpenCode drops a tool from the provider request only when the last permission rule for it is a
 // blanket `"*": "deny"`. A deny scoped to a pattern that matches every command keeps `bash` in the
@@ -15,6 +18,16 @@ export function hidePrometheusBashOutsideZenFree(input: unknown, agentOverrides?
 
   const tools = isRecord(input.message.tools) ? input.message.tools : {}
   input.message.tools = { ...tools, bash: false }
+}
+
+export function isConfiguredPrometheusAgent(
+  agentName: string | undefined,
+  overrides: AgentDisplayNameOverrides | undefined,
+): boolean {
+  if (isPrometheusAgent(agentName)) return true
+  if (agentName === undefined) return false
+  const displayName = getAgentDisplayName("prometheus", overrides)
+  return stripAgentListSortPrefix(agentName).trim().toLowerCase() === displayName.trim().toLowerCase()
 }
 
 function readAgentName(agent: unknown): string | undefined {

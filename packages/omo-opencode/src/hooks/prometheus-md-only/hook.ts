@@ -1,18 +1,15 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { HOOK_NAME, BLOCKED_TOOLS, PROMETHEUS_BASH_BLOCKED_MESSAGE, PLANNING_CONSULT_WARNING, PLANNING_CONTEXT_OPEN, PROMETHEUS_WORKFLOW_REMINDER } from "./constants"
+import { HOOK_NAME, BLOCKED_TOOLS, PLANNING_CONSULT_WARNING, PLANNING_CONTEXT_OPEN, PROMETHEUS_WORKFLOW_REMINDER } from "./constants"
 import { log } from "../../shared/logger"
 import { replaceToolArgs } from "../../shared/replace-tool-args"
 import { getAgentDisplayName } from "../../shared/agent-display-names"
 import { getAgentFromSession } from "./agent-resolution"
-import { isConfiguredPrometheusAgent, isPrometheusAgent, type AgentDisplayNameOverrides } from "./agent-matcher"
+import { isPrometheusAgent } from "./agent-matcher"
 import { isAllowedFile } from "./path-policy"
 
 const TASK_TOOLS = ["task", "call_omo_agent"]
 
-export function createPrometheusMdOnlyHook(
-  ctx: PluginInput,
-  options: { agentOverrides?: AgentDisplayNameOverrides } = {},
-) {
+export function createPrometheusMdOnlyHook(ctx: PluginInput) {
   return {
     "tool.execute.before": async (
       input: { tool: string; sessionID: string; callID: string },
@@ -20,19 +17,11 @@ export function createPrometheusMdOnlyHook(
     ): Promise<void> => {
       const agentName = await getAgentFromSession(input.sessionID, ctx.directory, ctx.client)
 
-      const toolName = input.tool
-
-      if (toolName.toLowerCase() === "bash" && isConfiguredPrometheusAgent(agentName, options.agentOverrides)) {
-        log(`[${HOOK_NAME}] Blocked: Prometheus cannot run shell commands`, {
-          sessionID: input.sessionID,
-          agent: agentName,
-        })
-        throw new Error(PROMETHEUS_BASH_BLOCKED_MESSAGE)
-      }
-
       if (!isPrometheusAgent(agentName)) {
         return
       }
+
+      const toolName = input.tool
 
       // Inject planning-only warning for task tools called by Prometheus
        if (TASK_TOOLS.includes(toolName)) {

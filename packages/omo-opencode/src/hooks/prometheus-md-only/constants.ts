@@ -11,11 +11,6 @@ export const ALLOWED_PATH_PREFIX = ".omo"
 
 export const BLOCKED_TOOLS = ["Write", "Edit", "write", "edit"]
 
-export const PROMETHEUS_BASH_BLOCKED_MESSAGE =
-  `[${HOOK_NAME}] Prometheus is a planning agent and cannot run shell commands. ` +
-  `Use read, grep, and glob to inspect the project, or delegate investigation to explore or librarian. ` +
-  `Record any command the work needs as a todo in the plan.`
-
 /**
  * XML-tag wrapper used to mark the planning-context boundary in prompts
  * forwarded to external LLMs via task(). This format intentionally avoids

@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { randomUUID } from "node:crypto"
 import { SYSTEM_DIRECTIVE_PREFIX } from "../../shared/system-directive"
-import { HOOK_NAME, PLANNING_CONTEXT_OPEN } from "./constants"
+import { PLANNING_CONTEXT_OPEN } from "./constants"
 import { clearSessionAgent, setSessionAgent } from "../../features/claude-code-session-state"
 // Force stable (JSON) mode for tests that rely on message file storage
 mock.module("../../shared/opencode-storage-detection", () => ({
@@ -340,19 +340,22 @@ describe("prometheus-md-only", () => {
       ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
     })
 
-    test("should refuse bash commands from Prometheus", async () => {
+    test("should allow bash commands from Prometheus", async () => {
       // given
       const hook = createPrometheusMdOnlyHook(createMockPluginInput())
+      const input = {
+        tool: "bash",
+        sessionID: TEST_SESSION_ID,
+        callID: "call-1",
+      }
+      const output = {
+        args: { command: "echo test" },
+      }
 
       // when / #then
-      for (const tool of ["bash", "Bash"]) {
-        await expect(
-          hook["tool.execute.before"](
-            { tool, sessionID: TEST_SESSION_ID, callID: "call-1" },
-            { args: { command: "echo test > notes.txt" } },
-          )
-        ).rejects.toThrow(HOOK_NAME)
-      }
+      await expect(
+        hook["tool.execute.before"](input, output)
+      ).resolves.toBeUndefined()
     })
 
     test("should not affect non-blocked tools", async () => {
@@ -493,40 +496,6 @@ describe("prometheus-md-only", () => {
     })
   })
 
-  describe("with Prometheus renamed through displayName", () => {
-    beforeEach(() => {
-      setupMessageStorage(TEST_SESSION_ID, "Planner")
-    })
-
-    test("should refuse bash from the renamed Prometheus", async () => {
-      // given
-      const hook = createPrometheusMdOnlyHook(createMockPluginInput(), {
-        agentOverrides: { prometheus: { displayName: "Planner" } },
-      })
-
-      // when / #then
-      await expect(
-        hook["tool.execute.before"](
-          { tool: "bash", sessionID: TEST_SESSION_ID, callID: "call-1" },
-          { args: { command: "echo test" } },
-        )
-      ).rejects.toThrow(HOOK_NAME)
-    })
-
-    test("should keep bash for an agent named like the override when no override is configured", async () => {
-      // given
-      const hook = createPrometheusMdOnlyHook(createMockPluginInput())
-
-      // when / #then
-      await expect(
-        hook["tool.execute.before"](
-          { tool: "bash", sessionID: TEST_SESSION_ID, callID: "call-1" },
-          { args: { command: "echo test" } },
-        )
-      ).resolves.toBeUndefined()
-    })
-  })
-
   describe("with non-Prometheus agent in message storage", () => {
     beforeEach(() => {
       setupMessageStorage(TEST_SESSION_ID, "sisyphus")
@@ -543,18 +512,6 @@ describe("prometheus-md-only", () => {
       const output = {
         args: { filePath: "/path/to/file.ts" },
       }
-
-      // when / #then
-      await expect(
-        hook["tool.execute.before"](input, output)
-      ).resolves.toBeUndefined()
-    })
-
-    test("should let non-Prometheus agents run bash", async () => {
-      // given
-      const hook = createPrometheusMdOnlyHook(createMockPluginInput())
-      const input = { tool: "bash", sessionID: TEST_SESSION_ID, callID: "call-1" }
-      const output = { args: { command: "echo test" } }
 
       // when / #then
       await expect(

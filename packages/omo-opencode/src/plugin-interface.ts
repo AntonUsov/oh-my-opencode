@@ -102,6 +102,7 @@ export function createPluginInterface(args: {
       ctx,
       hooks,
       backgroundManager: managers.backgroundManager,
+      agentOverrides: pluginConfig.agents,
     }),
 
     "tool.execute.after": createToolExecuteAfterHandler({

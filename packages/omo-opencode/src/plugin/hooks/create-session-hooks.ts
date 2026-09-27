@@ -184,7 +184,7 @@ export function createSessionHooks(args: {
     : null
 
   const prometheusMdOnly = isHookEnabled("prometheus-md-only")
-    ? safeHook("prometheus-md-only", () => createPrometheusMdOnlyHook(ctx, { agentOverrides: pluginConfig.agents }))
+    ? safeHook("prometheus-md-only", () => createPrometheusMdOnlyHook(ctx))
     : null
 
   const sisyphusJuniorNotepad = isHookEnabled("sisyphus-junior-notepad")
