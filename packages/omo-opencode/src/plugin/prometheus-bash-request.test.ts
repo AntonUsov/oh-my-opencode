@@ -107,6 +107,21 @@ describe("Prometheus bash in the OpenCode request", () => {
     },
   )
 
+  test("#given Prometheus renamed through displayName #when it runs on a paid provider #then bash stays out of the request", () => {
+    // given
+    const rules = agentRules("prometheus")
+    const message: Record<string, unknown> = {}
+
+    // when
+    hidePrometheusBashOutsideZenFree(
+      { agent: "Planner", model: ANTHROPIC_MODEL, message },
+      { prometheus: { displayName: "Planner" } },
+    )
+
+    // then
+    expect(requestTools(BUILTIN_TOOLS, rules, message.tools as Record<string, unknown>)).not.toContain("bash")
+  })
+
   test("#given a message that already disabled tools #when bash is hidden #then the other switches are kept", () => {
     // given
     const message: Record<string, unknown> = { tools: { webfetch: false } }

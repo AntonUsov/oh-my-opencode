@@ -4,12 +4,15 @@ import { log } from "../../shared/logger"
 import { replaceToolArgs } from "../../shared/replace-tool-args"
 import { getAgentDisplayName } from "../../shared/agent-display-names"
 import { getAgentFromSession } from "./agent-resolution"
-import { isPrometheusAgent } from "./agent-matcher"
+import { isConfiguredPrometheusAgent, isPrometheusAgent, type AgentDisplayNameOverrides } from "./agent-matcher"
 import { isAllowedFile } from "./path-policy"
 
 const TASK_TOOLS = ["task", "call_omo_agent"]
 
-export function createPrometheusMdOnlyHook(ctx: PluginInput) {
+export function createPrometheusMdOnlyHook(
+  ctx: PluginInput,
+  options: { agentOverrides?: AgentDisplayNameOverrides } = {},
+) {
   return {
     "tool.execute.before": async (
       input: { tool: string; sessionID: string; callID: string },
@@ -17,18 +20,18 @@ export function createPrometheusMdOnlyHook(ctx: PluginInput) {
     ): Promise<void> => {
       const agentName = await getAgentFromSession(input.sessionID, ctx.directory, ctx.client)
 
-      if (!isPrometheusAgent(agentName)) {
-        return
-      }
-
       const toolName = input.tool
 
-      if (toolName.toLowerCase() === "bash") {
+      if (toolName.toLowerCase() === "bash" && isConfiguredPrometheusAgent(agentName, options.agentOverrides)) {
         log(`[${HOOK_NAME}] Blocked: Prometheus cannot run shell commands`, {
           sessionID: input.sessionID,
           agent: agentName,
         })
         throw new Error(PROMETHEUS_BASH_BLOCKED_MESSAGE)
+      }
+
+      if (!isPrometheusAgent(agentName)) {
+        return
       }
 
       // Inject planning-only warning for task tools called by Prometheus

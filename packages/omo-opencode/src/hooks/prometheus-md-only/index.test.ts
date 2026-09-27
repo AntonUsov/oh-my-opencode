@@ -493,6 +493,40 @@ describe("prometheus-md-only", () => {
     })
   })
 
+  describe("with Prometheus renamed through displayName", () => {
+    beforeEach(() => {
+      setupMessageStorage(TEST_SESSION_ID, "Planner")
+    })
+
+    test("should refuse bash from the renamed Prometheus", async () => {
+      // given
+      const hook = createPrometheusMdOnlyHook(createMockPluginInput(), {
+        agentOverrides: { prometheus: { displayName: "Planner" } },
+      })
+
+      // when / #then
+      await expect(
+        hook["tool.execute.before"](
+          { tool: "bash", sessionID: TEST_SESSION_ID, callID: "call-1" },
+          { args: { command: "echo test" } },
+        )
+      ).rejects.toThrow(HOOK_NAME)
+    })
+
+    test("should keep bash for an agent named like the override when no override is configured", async () => {
+      // given
+      const hook = createPrometheusMdOnlyHook(createMockPluginInput())
+
+      // when / #then
+      await expect(
+        hook["tool.execute.before"](
+          { tool: "bash", sessionID: TEST_SESSION_ID, callID: "call-1" },
+          { args: { command: "echo test" } },
+        )
+      ).resolves.toBeUndefined()
+    })
+  })
+
   describe("with non-Prometheus agent in message storage", () => {
     beforeEach(() => {
       setupMessageStorage(TEST_SESSION_ID, "sisyphus")

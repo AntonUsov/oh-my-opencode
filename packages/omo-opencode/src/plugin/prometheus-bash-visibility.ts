@@ -1,5 +1,5 @@
 import { isRecord } from "@oh-my-opencode/utils"
-import { isPrometheusAgent } from "../hooks/prometheus-md-only/agent-matcher"
+import { isConfiguredPrometheusAgent, type AgentDisplayNameOverrides } from "../hooks/prometheus-md-only/agent-matcher"
 
 // OpenCode drops a tool from the provider request only when the last permission rule for it is a
 // blanket `"*": "deny"`. A deny scoped to a pattern that matches every command keeps `bash` in the
@@ -8,9 +8,9 @@ export const PROMETHEUS_BASH_PERMISSION = { "**": "deny" } as const
 
 // OpenCode's Zen free tier rejects any request without the `bash` tool, so Prometheus keeps it there.
 // Everywhere else the per-message tool switch, which OpenCode applies after chat.params, hides it as before.
-export function hidePrometheusBashOutsideZenFree(input: unknown): void {
+export function hidePrometheusBashOutsideZenFree(input: unknown, agentOverrides?: AgentDisplayNameOverrides): void {
   if (!isRecord(input) || !isRecord(input.message)) return
-  if (!isPrometheusAgent(readAgentName(input.agent))) return
+  if (!isConfiguredPrometheusAgent(readAgentName(input.agent), agentOverrides)) return
   if (isOpenCodeZenFreeModel(input.model)) return
 
   const tools = isRecord(input.message.tools) ? input.message.tools : {}
