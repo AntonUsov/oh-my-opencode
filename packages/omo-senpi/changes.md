@@ -1,3 +1,14 @@
+## 2026-09-27 - Persist mailbox operations without whole-queue rewrites
+
+The ordered-delivery mailbox now records one durable journal update per enqueue
+or removal instead of serializing and fsyncing the complete pending queue after
+every mutation. Enqueue and non-compacting removal updates append one event;
+bounded snapshots compact drained or long journals. Existing `mailbox.json`
+snapshots migrate on first open, preserving sequence numbers and queued
+messages. The cap-and-restart test keeps the same count, byte, overflow, and
+recovery contracts with injected limits, and the earlier 15-second timeout
+override is removed.
+
 ## local launcher: `omo update` points at bun
 
 `src/install/local-launcher.ts`: the generated local `omo` launcher (sibling-store installs) printed
