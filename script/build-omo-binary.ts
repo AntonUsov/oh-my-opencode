@@ -24,7 +24,9 @@ import { tmpdir } from "node:os"
 import { dirname, join, relative, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 import { z } from "zod"
+import { claudeCodePinFileContent, installedClaudeCodePinSources } from "./claude-code-pin"
 import { engineSidecarSources, resolvePackageDir, senpiPackageDir, type SidecarSource } from "./engine-sidecar-sources"
+import { CLAUDE_CODE_PIN_FILE } from "../packages/omo-senpi/src/components/claude-code/pin"
 import nativeFixture from "./release-binary-native-fixture.json"
 import { senpiWorkerCompileArgs } from "./senpi-worker-compile"
 import { parseBuildInfo, type EngineBuildStamp, type OmoBuildInfo } from "../packages/omo-native/build-info"
@@ -351,7 +353,7 @@ function stageSource(source: SidecarSource, stageDir: string, staged: Set<string
  * Native files come from the fixture, even when they must be fetched at staging time.
  */
 export function resolveExpectedSidecarRelPaths(target: ReleaseBinaryTarget): string[] {
-  const relPaths = new Set<string>(["package.json"])
+  const relPaths = new Set<string>(["package.json", CLAUDE_CODE_PIN_FILE])
   const collectFrom = (from: string, to: string): void => {
     if (!existsSync(from)) return
     if (!statSync(from).isDirectory()) {
@@ -508,6 +510,8 @@ export function stageSidecarPayload(
   const releaseEngineBuild = releaseEngineBuildStamp(omoBinaryEngineStamp(buildInfo, senpiPackageDir))
   writeFileSync(join(stageDir, "package.json"), createStampedPackageJson(omoAiVersion, buildInfo, releaseEngineBuild), "utf8")
   staged.add("package.json")
+  writeFileSync(join(stageDir, CLAUDE_CODE_PIN_FILE), claudeCodePinFileContent(target.target, installedClaudeCodePinSources(repoRoot)), "utf8")
+  staged.add(CLAUDE_CODE_PIN_FILE)
   for (const source of engineSidecarSources()) stageSource(source, stageDir, staged)
   stagePluginPayload(stageDir, staged)
   for (const entry of target.nativePrebuilds) stageNativePrebuild(entry, stageDir, staged)

@@ -11,6 +11,7 @@ import { launchSpecDoctorLines } from "./bin/lib/launch-spec-mode.js"
 import { needsSetupSuggestion, type detectHarnesses } from "./bin/lib/setup-detect.js"
 import { compiledDiagnosticRuntimeLoader, loadCompiledCoverageEngine } from "./compiled-diagnostic-runtime"
 import { configDoctorLines } from "./config-doctor-runtime"
+import { claudeCodeDoctorLines } from "./claude-code-doctor"
 
 type DaemonEngine = { run(args: string[], options: { env: Record<string, string | undefined> }): { exitCode: number; stdout: string; stderr: string } }
 
@@ -92,6 +93,7 @@ export async function runCompiledDoctor(input: CompiledDoctorInput): Promise<voi
   lines.push(...configDoctorLines({ cwd: process.cwd(), env }))
   lines.push(...piConfigReport({ env: options.env, homeDir: options.homeDir }))
   lines.push(...staleEngineReport(options))
+  lines.push(...claudeCodeDoctorLines(input.execDir, env))
   lines.push(...transientMemoryReport({ env }))
   const [computerUse, coverage] = await Promise.all([computerUseLines(input, env), coverageLines(input, env)])
   if (computerUse.some((line) => line.startsWith("FAIL "))) failed = true

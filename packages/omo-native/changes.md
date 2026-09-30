@@ -1,3 +1,14 @@
+## 2026-09-30 - The compiled binary points the engine at a downloaded Claude Code and doctor reports it (#9257)
+
+`compile-entry.ts` calls `applyCachedClaudeCodeExecutable` (omo-senpi `claude-code/launch.ts`) right after
+`remapSenpiEnvironment`, so a launch whose Claude Code was already downloaded by the `claude-code` component hands the
+engine `CLAUDE_CODE_EXECUTABLE` before any auth probe runs; an explicit `CLAUDE_CODE_EXECUTABLE` or `claude` on PATH
+still wins. New `claude-code-doctor.ts` adds one line to the compiled `omo doctor` (`compiled-doctor.ts`): `PASS claude code:` with the override, the
+PATH binary or the downloaded package, or `INFO claude code: not downloaded yet; the first Claude turn downloads
+<package>@<version> from <registry> (sha512-verified)`, with no network call. npm installs print nothing (their payload
+has no `claude-code.json`). The release build (`script/build-omo-binary.ts`) stages that pin for each target through
+`script/claude-code-pin.ts` and fails when `bun.lock` has no sha512 for the pinned package.
+
 ## 2026-09-30 - The standalone binary reports and reaps its own stale engines (#9252 follow-up)
 
 `omo doctor --reap <pid>` on the standalone binary printed the regular report and reaped nothing, because the compiled

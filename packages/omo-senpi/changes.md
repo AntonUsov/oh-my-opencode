@@ -1,3 +1,26 @@
+## 2026-09-30 - claude-code: a compiled binary downloads the pinned Claude Code on its first Claude turn (#9257)
+
+- `src/components/claude-code/` (new component `claude-code`, registered after `computer-use`): the standalone binary
+  cannot embed Claude Code (the darwin-arm64 executable is 226,563,088 bytes against the 150 MB binary budget), so its
+  engine found no executable and every `anthropic-subscription` turn ended with "Claude Code executable not found".
+  `pin.ts` reads `claude-code.json`, which only the compiled payload carries (`script/claude-code-pin.ts`): the platform
+  package the engine's `@anthropic-ai/claude-agent-sdk` pins and its npm `dist.integrity` from `bun.lock`. Without that
+  file (every npm install, which keeps the SDK's bundled sidecar) the component registers nothing.
+- `component.ts`: an `input` handler, the one extension hook senpi awaits before a prompt's auth check and provider
+  stream, runs only when the session model's provider is `anthropic-subscription` and `locate.ts` finds neither an
+  explicit `CLAUDE_CODE_EXECUTABLE` nor `claude` on PATH (the engine's own order, so both keep winning). It notifies once,
+  shows `Downloading Claude Code <version>: N% of M MB` in the `omo-claude-code` status, shares one download between
+  concurrent turns, and sets `CLAUDE_CODE_EXECUTABLE` for the engine. A failure notifies an error naming the registry
+  and the fixes (connect, install `claude` on PATH, or set `CLAUDE_CODE_EXECUTABLE`), and the next turn retries.
+- `acquire.ts` streams `<registry>/<name>/-/<name>-<version>.tgz` (`npm_config_registry` honored), rejects any body whose
+  sha512 differs from the pin, extracts `package/claude[.exe]` (`tarball.ts`, ustar), and installs it into
+  `<OMO_PACKAGE_DIR>/claude-code/<version>/` with the integrity marker written last, so an interrupted install is never
+  trusted. `launch.ts` `applyCachedClaudeCodeExecutable` lets the compiled launcher point the engine at a cached copy
+  before it starts, which covers later launches, task children, and the ambient `claude auth status` probe.
+- Limit: on the launch that downloads, an ambient-login-only setup (no stored account or token) may have had senpi's
+  startup availability probe cache "unavailable" for 30 s (`availability.ts` `AMBIENT_STATUS_TTL_MS`, run by
+  `model-runtime.ts` `runAvailabilityRefresh`); the next turn after that window, and every later launch, resolve it.
+
 ## 2026-09-30 - model-profile e2e: lane-beats-recommended-models proves a real recommended-models switch (#9238)
 
 - `scripts/qa/model-profile-e2e-scenarios.mjs`: `lane-beats-recommended-models` serves `mock-1`, `glm-5.3` and
