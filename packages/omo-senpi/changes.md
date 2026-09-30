@@ -12,6 +12,10 @@
   shows `Downloading Claude Code <version>: N% of M MB` in the `omo-claude-code` status, shares one download between
   concurrent turns, and sets `CLAUDE_CODE_EXECUTABLE` for the engine. A failure notifies an error naming the registry
   and the fixes (connect, install `claude` on PATH, or set `CLAUDE_CODE_EXECUTABLE`), and the next turn retries.
+- A turn an extension starts (onboarding's first-run greeting, any `sendMessage(..., { triggerTurn: true })`) emits no
+  `input` event, so the same check also runs on `before_agent_start` (registered `previewSafe`; the prompt-cache
+  preview never downloads). Measured on the rebuilt darwin-arm64 binary: without it, onboarding's first turn reached
+  the provider 6.5 s into the download and failed with "executable not found".
 - `acquire.ts` streams `<registry>/<name>/-/<name>-<version>.tgz` (`npm_config_registry` honored), rejects any body whose
   sha512 differs from the pin, extracts `package/claude[.exe]` (`tarball.ts`, ustar), and installs it into
   `<OMO_PACKAGE_DIR>/claude-code/<version>/` with the integrity marker written last, so an interrupted install is never

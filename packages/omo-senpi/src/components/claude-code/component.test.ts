@@ -50,7 +50,9 @@ function harness(options: { readonly withPin?: boolean; readonly pathDir?: strin
   })
   const input = (provider = "anthropic-subscription") =>
     Promise.all((handlers.get("input") ?? []).map((handler) => handler({ type: "input", text: "hi" }, eventCtx(provider))))
-  return { pin, packageDir, env, handlers, notices, statuses, acquisitions, input }
+  const agentStart = (preview: boolean) =>
+    Promise.all((handlers.get("before_agent_start") ?? []).map((handler) => handler({ type: "before_agent_start", prompt: "", preview }, eventCtx("anthropic-subscription"))))
+  return { pin, packageDir, env, handlers, notices, statuses, acquisitions, input, agentStart }
 }
 
 describe("createClaudeCodeComponent", () => {
@@ -68,6 +70,19 @@ describe("createClaudeCodeComponent", () => {
     expect(env.CLAUDE_CODE_EXECUTABLE).toBe("/cache/claude")
     expect(notices.map((notice) => notice.level)).toEqual(["info", "info", "info"])
     expect(statuses).toEqual(["Downloading Claude Code 0.3.284: 50% of 0 MB", undefined, undefined])
+  })
+
+  test("#given a turn an extension triggers (no input event) #when it starts #then Claude Code is downloaded before the provider runs", async () => {
+    const { acquisitions, env, agentStart } = harness()
+    await agentStart(false)
+    expect(acquisitions).toHaveLength(1)
+    expect(env.CLAUDE_CODE_EXECUTABLE).toBe("/cache/claude")
+  })
+
+  test("#given the prompt-cache preview #then it never starts a download", async () => {
+    const { acquisitions, agentStart } = harness()
+    await agentStart(true)
+    expect(acquisitions).toHaveLength(0)
   })
 
   test("#given a turn on another provider #then nothing is downloaded", async () => {

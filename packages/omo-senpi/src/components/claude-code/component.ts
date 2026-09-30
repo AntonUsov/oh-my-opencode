@@ -37,6 +37,10 @@ function eventUi(eventCtx: unknown, writeStderr: (text: string) => void): EventU
   return { notify: (message) => writeStderr(`${message}\n`), setStatus: () => undefined }
 }
 
+function isPreview(payload: unknown): boolean {
+  return typeof payload === "object" && payload !== null && Reflect.get(payload, "preview") === true
+}
+
 const megabytes = (bytes: number): string => `${Math.round(bytes / 1_048_576)} MB`
 
 export function claudeCodeProgressText(pin: ClaudeCodePin, progress: ClaudeCodeDownloadProgress): string {
@@ -57,8 +61,10 @@ export function claudeCodeFailureNotice(pin: ClaudeCodePin, env: NodeJS.ProcessE
 /**
  * The compiled omo binary cannot embed Claude Code (over the binary size budget), so the first turn on a
  * Claude subscription model downloads the pinned platform package instead. The `input` event is the only
- * extension hook senpi awaits before a prompt's auth check and provider stream (agent-session prompt()),
- * which is why the download happens here and hands the result to senpi through CLAUDE_CODE_EXECUTABLE.
+ * extension hook senpi awaits before a prompt's auth check and provider stream (agent-session prompt());
+ * a turn an extension starts (onboarding's first greeting, `sendMessage(..., { triggerTurn: true })`)
+ * skips `input`, so `before_agent_start` covers it. Either hands the result to senpi through
+ * CLAUDE_CODE_EXECUTABLE.
  */
 export function createClaudeCodeComponent(options: ClaudeCodeComponentOptions = {}): OmoSenpiComponent {
   const env = options.env ?? process.env
@@ -73,7 +79,7 @@ export function createClaudeCodeComponent(options: ClaudeCodeComponentOptions = 
       const pin = readClaudeCodePin(packageDir)
       if (pin === undefined || packageDir === undefined) return
 
-      pi.on("input", async (_payload, eventCtx) => {
+      const ensure = async (eventCtx: unknown): Promise<undefined> => {
         if (modelProvider(eventCtx) !== CLAUDE_CODE_PROVIDER) return undefined
         const located = locateClaudeCode({ packageDir, pin, env })
         if (located.kind === "cached") env[CLAUDE_CODE_EXECUTABLE_ENV] = located.path
@@ -108,7 +114,14 @@ export function createClaudeCodeComponent(options: ClaudeCodeComponentOptions = 
           ui.setStatus(CLAUDE_CODE_STATUS_KEY, undefined)
         }
         return undefined
-      })
+      }
+
+      pi.on("input", (_payload, eventCtx) => ensure(eventCtx))
+      pi.on(
+        "before_agent_start",
+        (payload, eventCtx) => isPreview(payload) ? undefined : ensure(eventCtx),
+        { previewSafe: true },
+      )
     },
   }
 }
