@@ -81,7 +81,7 @@ export function createClaudeCodeComponent(options: ClaudeCodeComponentOptions = 
 
         const ui = eventUi(eventCtx, writeStderr)
         if (inFlight === undefined) {
-          ui.notify(`Downloading Claude Code ${pin.name}@${pin.version} for the first Claude turn of this omo version; it is verified against its pinned sha512 and cached for later sessions.`, "info")
+          ui.notify(`Downloading Claude Code ${pin.name}@${pin.version} for the first Claude turn of this OmO release; it is verified against its pinned sha512 and cached for later sessions.`, "info")
           let shownPercent = -1
           inFlight = acquire({
             packageDir,
