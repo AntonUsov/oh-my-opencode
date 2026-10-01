@@ -1,3 +1,7 @@
+## 2026-10-01 - Request missing macOS computer-use grants before opening Settings (omo-desktop-app#1437)
+
+The first denied Screen Recording or Accessibility action now asks macOS for access before opening its privacy pane, registering the responsible app instead of directing a new user to a list with no app row. Each permission shares one session latch for requesting and opening, including unsuccessful requests; granted actions and passive probes do not prompt. First-denial guidance explains the request and pane opening; repeat denials refer to the pane opened earlier, or ask the user to open it if the first attempt failed. Both ask the user to turn on the app, fully quit and relaunch, while preserving the responsible-process diagnostic.
+
 ## 2026-10-01 - The curl installer hands pipes from sh to Bash (#9325)
 
 `install.sh` keeps its Bash implementation, but its first block now parses as POSIX sh. When a user pipes the script to `sh` or `dash`, that block writes the Bash body from a quoted here-document to a private temp file and runs it with Bash, preserving arguments and the exit status. Sourcing the script from Bash, as the other-install tests do, still only defines the installer functions. If Bash is unavailable, it exits before any Bash syntax is parsed and prints the single command that uses Bash explicitly. Direct `| bash` installs are unchanged. Tests run the preamble through `sh` and `dash`, prove the complete buffered body and arguments reach Bash, and retain a direct Bash syntax check.

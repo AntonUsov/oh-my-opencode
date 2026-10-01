@@ -41,11 +41,7 @@ pub fn is_trusted() -> bool {
 }
 
 pub(super) fn ensure_trusted() -> CoreResult<()> {
-    if is_trusted() {
-        Ok(())
-    } else {
-        Err(crate::backend::permissions::permission_denied(TccPermission::Accessibility))
-    }
+    crate::backend::permissions::require_permission(TccPermission::Accessibility, is_trusted())
 }
 
 pub(super) fn handle(element: CFRetained<AXUIElement>) -> AxHandle {

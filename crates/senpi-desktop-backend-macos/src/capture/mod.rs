@@ -1,6 +1,7 @@
 //! Quartz capture: TCC preflight, display/window enumeration, and
 //! `screencapture`-based capture with a display-only CoreGraphics fallback.
-//! Never prompts for permission and never uses ScreenCaptureKit.
+//! Requests permission once on denial; preflight probes never prompt.
+//! Never uses ScreenCaptureKit.
 
 mod displays;
 mod fallback;
@@ -64,11 +65,10 @@ impl MacCapture {
     }
 
     fn require_permission(&self) -> CoreResult<()> {
-        if self.permission_granted() {
-            Ok(())
-        } else {
-            Err(permission_denied())
-        }
+        crate::backend::permissions::require_permission(
+            TccPermission::ScreenRecording,
+            self.permission_granted(),
+        )
     }
 
     /// One `screencapture -x -R<rect>` per display, composited. When the tool

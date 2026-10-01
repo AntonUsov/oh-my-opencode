@@ -95,11 +95,7 @@ impl MacosBackend {
     }
 
     fn require_input_permission() -> CoreResult<()> {
-        if is_trusted() {
-            Ok(())
-        } else {
-            Err(permissions::permission_denied(TccPermission::Accessibility))
-        }
+        permissions::require_permission(TccPermission::Accessibility, is_trusted())
     }
 }
 
