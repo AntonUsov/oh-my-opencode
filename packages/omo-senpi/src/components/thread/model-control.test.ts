@@ -561,3 +561,122 @@ describe("#9425 a switch the engine does not apply leaves the record and the out
     expect(await f.recorded()).toMatchObject({ ...GPT_Y, provenance: "fallback" })
   })
 })
+
+describe("#9425 a held or out-of-order set-model never lies about what the engine runs", () => {
+  test("#given a set-model the engine holds for compaction #when the SDK call returns #then the stored model and the result still name the model the engine runs", async () => {
+    const f = sdkFixture()
+    const e = engineFixture()
+    await f.sdk.setModel({ thread: "lane", model: "the model" })
+    Object.assign(f.host, {
+      setModel: async (_sessionId: string, provider: string, id: string) => {
+        await e.userSwitch({ provider, id, defaultThinkingLevel: "xhigh" })
+        // The pinned engine's exact set_model RPC contract (connection-handler.js:883-884): the reply echoes the requested model.
+        return { provider, id }
+      },
+      getState: async () => ({ model: e.engine.model, thinkingLevel: e.engine.thinkingLevel }),
+    })
+    e.admission.hold = true
+    const result = await f.sdk.setModel({ thread: "lane", model: "gpt-y" })
+    await e.settle()
+    const stored = (await f.store.sessionModels(["dur-lane"]))["dur-lane"]
+    const engineId = e.engine.model?.id
+    const engineProvider = e.engine.model?.provider
+    if (engineId === undefined || engineProvider === undefined) throw new Error("engine held no model")
+    expect(engineId).toBe(CLAUDE.id)
+    expect(engineProvider).toBe(CLAUDE.provider)
+    expect(stored?.id).toBe(engineId)
+    expect(stored?.provider).toBe(engineProvider)
+    expect(result).toMatchObject({ kind: "ok", model: { provider: CLAUDE.provider, id: CLAUDE.id } })
+  })
+
+  test("#given two set-model calls whose first completes last #when both finish #then the store still names the later applied model", async () => {
+    const f = sdkFixture()
+    const stateEntered = Promise.withResolvers<void>()
+    const releaseState = Promise.withResolvers<void>()
+    let reads = 0
+    const originalGetState = f.host.getState
+    Object.assign(f.host, {
+      getState: async (sessionId: string) => {
+        const state = await originalGetState(sessionId)
+        if (++reads === 1) {
+          stateEntered.resolve()
+          await releaseState.promise
+        }
+        return { ...state, model: f.models.get(sessionId) }
+      },
+    })
+    const first = f.sdk.setModel({ thread: "lane", model: "gpt-x", set_by: "config" })
+    await stateEntered.promise
+    const second = await f.sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "user" })
+    releaseState.resolve()
+    const earlier = await first
+    const stored = (await f.store.sessionModels(["dur-lane"]))["dur-lane"]
+    expect(f.models.get("rpc-1")).toEqual({ provider: "openai", id: "gpt-y" })
+    expect(earlier).toMatchObject({ kind: "ok" })
+    expect(second).toMatchObject({ kind: "ok" })
+    expect(stored?.id).toBe("gpt-y")
+    expect(stored?.set_by).toBe("user")
+  })
+
+  test("#given a set-reasoning completing after a later set-model switched the model #when both finish #then the record keeps the newer model, not the read-back from before the switch", async () => {
+    const f = sdkFixture()
+    const stateEntered = Promise.withResolvers<void>()
+    const releaseState = Promise.withResolvers<void>()
+    let reads = 0
+    const originalGetState = f.host.getState
+    Object.assign(f.host, {
+      getState: async (sessionId: string) => {
+        const state = await originalGetState(sessionId)
+        if (++reads === 1) {
+          stateEntered.resolve()
+          await releaseState.promise
+        }
+        return { ...state, model: f.models.get(sessionId) }
+      },
+    })
+    const first = f.sdk.setReasoning({ thread: "lane", level: "high" })
+    await stateEntered.promise
+    const second = await f.sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "user" })
+    releaseState.resolve()
+    const earlier = await first
+    const stored = (await f.store.sessionModels(["dur-lane"]))["dur-lane"]
+    expect(f.models.get("rpc-1")).toEqual({ provider: "openai", id: "gpt-y" })
+    expect(earlier).toMatchObject({ kind: "ok", level: "high" })
+    expect(second).toMatchObject({ kind: "ok", model: { id: "gpt-y" } })
+    expect(stored?.id).toBe("gpt-y")
+    expect(stored?.set_by).toBe("user")
+    expect(stored?.thinking_level).toBe("high")
+  })
+
+  test("#given two set-reasoning calls whose first state read is answered from before the second applied #when both finish #then the record names the level the engine runs", async () => {
+    const f = sdkFixture()
+    await f.sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "user" })
+    const stateEntered = Promise.withResolvers<void>()
+    const releaseState = Promise.withResolvers<void>()
+    const originalGetState = f.host.getState
+    let reads = 0
+    Object.assign(f.host, {
+      // The first read's answer is computed at request time and delivered after the second call applied.
+      getState: async (sessionId: string) => {
+        const snapshot = await originalGetState(sessionId)
+        if (++reads === 1) {
+          stateEntered.resolve()
+          await releaseState.promise
+        }
+        return snapshot
+      },
+    })
+    const first = f.sdk.setReasoning({ thread: "lane", level: "high" })
+    await stateEntered.promise
+    const second = await f.sdk.setReasoning({ thread: "lane", level: "low" })
+    releaseState.resolve()
+    const earlier = await first
+    const engineLevel = ((await originalGetState("rpc-1")) as { thinkingLevel?: string }).thinkingLevel ?? null
+    const stored = (await f.store.sessionModels(["dur-lane"]))["dur-lane"]
+    expect(engineLevel).toBe("low")
+    expect(earlier).toMatchObject({ kind: "ok" })
+    expect(second).toMatchObject({ kind: "ok", level: "low" })
+    expect(stored?.id).toBe("gpt-y")
+    expect(stored?.thinking_level).toBe(engineLevel)
+  })
+})

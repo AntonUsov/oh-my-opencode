@@ -3,7 +3,7 @@ import type { OmoModelProfile } from "@oh-my-opencode/omo-config-core"
 import { DEFAULT_MODEL_PROFILE_ID } from "../model-profile/builtin-profiles"
 import { resolveModelProfile } from "../model-profile/resolve"
 import type { ThreadToolResult } from "./contracts"
-import { isModelSetter, MODEL_SETTERS, modelLabel, type ModelSetter, type ThreadModel } from "./gateway/session-models"
+import { isModelSetter, MODEL_SETTERS, modelLabel, type ModelRef, type ModelSetter, type ThreadModel } from "./gateway/session-models"
 import { failure, resolution, resolveEntries, routingId, sessionPort, summary, targetSession } from "./tools/internals"
 import type { ModelCatalogEntry, ThreadHostView, ThreadToolSurfaceOptions } from "./tools/ports"
 
@@ -103,6 +103,46 @@ function stateThinking(state: unknown): string | null {
   return typeof level === "string" ? level : null
 }
 
+/** The model the engine's own state names (`get_state`'s `model`); null when the host reports none. */
+function stateModel(state: unknown): ModelRef | null {
+  const model = (state as { readonly model?: unknown } | null | undefined)?.model
+  if (model === null || typeof model !== "object") return null
+  const { provider, id } = model as { readonly provider?: unknown; readonly id?: unknown }
+  return typeof provider === "string" && typeof id === "string" ? { provider, id } : null
+}
+
+type EngineRead = { readonly ref: ModelRef | null; readonly thinking: string | null }
+
+/**
+ * Persist what the engine actually runs, never what was asked for (#9429 B1/B2). The state read-back
+ * after the change names the engine's current model and level: a switch the engine holds for
+ * compaction reads back as the previous model, so the record keeps it (pending by construction)
+ * instead of claiming the unadmitted candidate. The write itself is a compare-and-swap against the
+ * row this call read before it touched the engine: a concurrent caller - or the session's own
+ * observed switch - that landed in between makes the swap fail, the engine is re-read, and the
+ * fresher truth wins. The stored state can never go backwards to an earlier engine state.
+ */
+async function persistEngineState(
+  options: ThreadToolSurfaceOptions,
+  durableId: string,
+  readState: () => Promise<unknown>,
+  build: (read: EngineRead, current: ThreadModel | null) => ThreadModel | null,
+): Promise<{ readonly row: ThreadModel | null; readonly read: EngineRead }> {
+  let current: ThreadModel | null = (await options.store.sessionModels([durableId]))[durableId] ?? null
+  let read: EngineRead = { ref: null, thinking: null }
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const state = await readState()
+    read = { ref: stateModel(state), thinking: stateThinking(state) }
+    const model: ThreadModel | null = build(read, current)
+    if (model === null) return { row: current, read }
+    if (current !== null && current.provider === model.provider && current.id === model.id && current.thinking_level === model.thinking_level) return { row: current, read }
+    const result = await options.store.recordSessionModelIfCurrent({ now: (options.now ?? options.store.now)(), durable_id: durableId, expect: current, model })
+    if (result.applied) return { row: model, read }
+    current = result.current
+  }
+  return { row: current, read }
+}
+
 /**
  * `thread_create` / `omo thread create`. Everything that can be refused is refused before the host
  * opens anything: a bad setter or level, a name in use, a model no connected provider serves, a level
@@ -165,9 +205,13 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
   const matched = matchModel(await port.getAvailableModels(routingId(session)), input.model, input.provider)
   if (matched.kind === "error") return matched
   const selected = await port.setModel(routingId(session), matched.entry.provider, matched.entry.id)
-  const model: ThreadModel = { provider: selected.provider, id: selected.id, thinking_level: stateThinking(await port.getState(routingId(session))), provenance: "set", set_by: setBy, reason: null }
-  await options.store.recordSessionModel({ now: (options.now ?? options.store.now)(), durable_id: resolved.entry.thread_id, model })
-  return { kind: "ok", thread_id: resolved.entry.thread_id, model }
+  const { row } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (read, current) => {
+    // The set_model reply echoes the requested model even when the engine held the switch; the
+    // read-back names what the engine runs. A host whose state carries no model falls back to it.
+    const ref = read.ref ?? { provider: selected.provider, id: selected.id }
+    return { ...ref, thinking_level: read.thinking ?? current?.thinking_level ?? null, provenance: "set", set_by: setBy, reason: null }
+  })
+  return { kind: "ok", thread_id: resolved.entry.thread_id, model: row ?? { provider: selected.provider, id: selected.id, thinking_level: null, provenance: "set", set_by: setBy, reason: null } }
 }
 
 /**
@@ -195,10 +239,17 @@ export async function setThreadReasoning(options: ThreadToolSurfaceOptions, curr
     if (!(error instanceof Error) || !error.message.startsWith("thinking_level_unsupported:")) throw error
     return unsupportedThinking(input.level, await port.getAvailableThinkingLevels(routingId(session)))
   }
-  const reported = stateThinking(await port.getState(routingId(session)))
+  const { read } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (engine, current) => {
+    // A record is only adjusted, never created, here; a model that changed mid-call is the switch's
+    // own record to write. A host whose state names no level gives nothing true to record.
+    const level = engine.thinking !== null && isThinkingLevel(engine.thinking) ? engine.thinking : null
+    if (level === null || current === null) return null
+    if (engine.ref !== null && (engine.ref.provider !== current.provider || engine.ref.id !== current.id)) return null
+    return { provider: current.provider, id: current.id, thinking_level: level, provenance: current.provenance, set_by: current.set_by, reason: current.reason }
+  })
+  const reported = read.thinking
   // A host whose state names no level gives nothing true to record; the request is echoed and the record left as it was.
   const effective = reported !== null && isThinkingLevel(reported) ? reported : undefined
-  if (effective !== undefined) await options.store.updateSessionThinking({ now: (options.now ?? options.store.now)(), durable_id: resolved.entry.thread_id, thinking_level: effective })
   return { kind: "ok", thread_id: resolved.entry.thread_id, level: (effective ?? input.level) as (typeof THINKING_LEVELS)[number], scope: input.scope === "turn" ? "turn" : "session" }
 }
 

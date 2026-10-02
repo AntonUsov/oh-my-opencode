@@ -124,6 +124,8 @@ export type GatewayStore = StoreExtensionApi & {
   readonly markPriorDelivered: (request: AnswerClaimRef & { readonly prior: PriorAnswer }) => Promise<boolean>
   /** #9425: the gateway's own model choice for a session it created or re-modelled. */
   readonly recordSessionModel: (request: { readonly now: number; readonly durable_id: string; readonly model: ThreadModel }) => Promise<ThreadModel>
+  /** Compare-and-swap variant (#9429 B2): writes only while the record still equals `expect`; reports the current row back otherwise. */
+  readonly recordSessionModelIfCurrent: (request: { readonly now: number; readonly durable_id: string; readonly expect: ThreadModel | null; readonly model: ThreadModel }) => Promise<{ readonly applied: boolean; readonly current: ThreadModel | null }>
   /** A new thinking level for a session with a model record; false when there is none. */
   readonly updateSessionThinking: (request: { readonly now: number; readonly durable_id: string; readonly thinking_level: string }) => Promise<boolean>
   /** The session's own `model_select`: keeps its record true and writes a fallback switch's milestone rows. */
@@ -354,6 +356,7 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     confirmAnswer: (request) => call("confirm_answer", request),
     markPriorDelivered: (request) => call("mark_prior_delivered", request),
     recordSessionModel: (request) => call("record_session_model", request),
+    recordSessionModelIfCurrent: (request) => call("record_session_model_if_current", request),
     updateSessionThinking: (request) => call("update_session_thinking", request),
     observeModelSelect: (request) => call("observe_model_select", request),
     sessionModels: (durableIds) => call("session_models", durableIds),

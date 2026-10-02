@@ -30,21 +30,47 @@ function selectModel(ctx: StoreContext, durableId: string): SqlRow | undefined {
   return ctx.sql.one([...COLUMNS], `SELECT ${COLUMNS.join(", ")} FROM session_models WHERE durable_id = ?`, [durableId])
 }
 
+function putModel(ctx: StoreContext, durableId: string, model: ThreadModel, now: number): void {
+  write(
+    ctx,
+    `INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(durable_id) DO UPDATE SET provider = excluded.provider, model_id = excluded.model_id, thinking_level = excluded.thinking_level,
+       provenance = excluded.provenance, set_by = excluded.set_by, reason = excluded.reason, chosen_provider = excluded.chosen_provider,
+       chosen_model_id = excluded.chosen_model_id, chosen_provenance = excluded.chosen_provenance, updated_at = excluded.updated_at`,
+    [durableId, model.provider, model.id, model.thinking_level, model.provenance, model.set_by, model.reason, model.provider, model.id, model.provenance === "fallback" ? null : model.provenance, now],
+  )
+}
+
 /** The gateway's own choice at spawn or `set-model`: replaces the record, and is what a later fallback revert returns to. */
 export async function recordSessionModel(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly model: ThreadModel }): Promise<ThreadModel> {
   const { model } = request
   await transaction(ctx, "record_session_model", () => {
-    write(
-      ctx,
-      `INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(durable_id) DO UPDATE SET provider = excluded.provider, model_id = excluded.model_id, thinking_level = excluded.thinking_level,
-         provenance = excluded.provenance, set_by = excluded.set_by, reason = excluded.reason, chosen_provider = excluded.chosen_provider,
-         chosen_model_id = excluded.chosen_model_id, chosen_provenance = excluded.chosen_provenance, updated_at = excluded.updated_at`,
-      [request.durable_id, model.provider, model.id, model.thinking_level, model.provenance, model.set_by, model.reason, model.provider, model.id, model.provenance === "fallback" ? null : model.provenance, request.now],
-    )
+    putModel(ctx, request.durable_id, model, request.now)
   })
   return model
+}
+
+function sameStoredModel(a: ThreadModel | null, b: ThreadModel | null): boolean {
+  if (a === null || b === null) return a === b
+  return a.provider === b.provider && a.id === b.id && a.thinking_level === b.thinking_level && a.provenance === b.provenance && a.set_by === b.set_by && a.reason === b.reason
+}
+
+/**
+ * Compare-and-swap for the model command paths (#9429 B2): writes `model` only while the record is
+ * still the row the caller read before it touched the engine. The store worker runs every op in one
+ * serial queue, so the check and the write are atomic across every SDK/CLI/agent caller sharing the
+ * database; a record that moved meanwhile is reported back instead of being overwritten, and the
+ * caller refreshes from the engine. The stored state can never go backwards to an earlier state.
+ */
+export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly expect: ThreadModel | null; readonly model: ThreadModel }): Promise<{ readonly applied: boolean; readonly current: ThreadModel | null }> {
+  return await transaction(ctx, "record_session_model_if_current", () => {
+    const row = selectModel(ctx, request.durable_id)
+    const current = row === undefined ? null : modelFrom(row)
+    if (!sameStoredModel(current, request.expect)) return { applied: false, current }
+    putModel(ctx, request.durable_id, request.model, request.now)
+    return { applied: true, current }
+  })
 }
 
 /** A new thinking level for a session the gateway has a record of; false when it has none. */
