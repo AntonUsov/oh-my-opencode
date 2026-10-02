@@ -563,7 +563,7 @@ describe("#9425 a switch the engine does not apply leaves the record and the out
 })
 
 describe("#9425 a held or out-of-order set-model never lies about what the engine runs", () => {
-  test("#given a set-model the engine holds for compaction #when the SDK call returns #then the stored model and the result still name the model the engine runs", async () => {
+  test("#given a set-model the engine holds for compaction #when the SDK call returns #then the result names the requested model as pending until the hold applies", async () => {
     const f = sdkFixture()
     const e = engineFixture()
     await f.sdk.setModel({ thread: "lane", model: "the model" })
@@ -586,7 +586,16 @@ describe("#9425 a held or out-of-order set-model never lies about what the engin
     expect(engineProvider).toBe(CLAUDE.provider)
     expect(stored?.id).toBe(engineId)
     expect(stored?.provider).toBe(engineProvider)
-    expect(result).toMatchObject({ kind: "ok", model: { provider: CLAUDE.provider, id: CLAUDE.id } })
+    // The ok result reports the model the engine still runs and marks the requested one pending:
+    // the caller learns its switch is held, never that it applied.
+    expect(result).toMatchObject({ kind: "ok", model: { provider: CLAUDE.provider, id: CLAUDE.id }, pending: { provider: GPT_Y.provider, id: GPT_Y.id } })
+  })
+
+  test("#given a set-model the engine applies at once #when the SDK call returns #then the result carries no pending field", async () => {
+    const f = sdkFixture()
+    const result = await f.sdk.setModel({ thread: "lane", model: "gpt-y" })
+    expect(result).toMatchObject({ kind: "ok", model: { provider: "openai", id: "gpt-y" } })
+    expect("pending" in result).toBe(false)
   })
 
   test("#given two set-model calls whose first completes last #when both finish #then the store still names the later applied model", async () => {

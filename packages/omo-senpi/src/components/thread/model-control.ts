@@ -194,7 +194,7 @@ export async function createThread(options: ThreadToolSurfaceOptions, current: T
 }
 
 /** `thread_set_model` / `omo thread set-model`: the switch the engine applies from the next turn, recorded as set by `setBy`. */
-export async function setThreadModel(options: ThreadToolSurfaceOptions, current: ThreadHostView, input: { readonly thread: string; readonly model: string; readonly provider?: string; readonly all_scope?: boolean }, callerId: string, setBy: unknown): Promise<{ readonly kind: "ok"; readonly thread_id: string; readonly model: ThreadModel } | Failure> {
+export async function setThreadModel(options: ThreadToolSurfaceOptions, current: ThreadHostView, input: { readonly thread: string; readonly model: string; readonly provider?: string; readonly all_scope?: boolean }, callerId: string, setBy: unknown): Promise<{ readonly kind: "ok"; readonly thread_id: string; readonly model: ThreadModel; readonly pending?: ModelRef } | Failure> {
   if (!isModelSetter(setBy)) return badSetter(setBy)
   const resolved = resolution(options, resolveEntries(options, current), input.thread, callerId, input.all_scope)
   if (resolved.kind === "error") return { kind: "error", error: resolved }
@@ -211,7 +211,12 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
     const ref = read.ref ?? { provider: selected.provider, id: selected.id }
     return { ...ref, thinking_level: read.thinking ?? current?.thinking_level ?? null, provenance: "set", set_by: setBy, reason: null }
   })
-  return { kind: "ok", thread_id: resolved.entry.thread_id, model: row ?? { provider: selected.provider, id: selected.id, thinking_level: null, provenance: "set", set_by: setBy, reason: null } }
+  const model = row ?? { provider: selected.provider, id: selected.id, thinking_level: null, provenance: "set", set_by: setBy, reason: null }
+  // A switch the engine held reads back as the previous model: the ok result names what runs and
+  // marks the requested model pending, so the tool, the SDK and the CLI can say the switch is held
+  // instead of answering the previous model with no explanation.
+  const held = model.provider !== selected.provider || model.id !== selected.id
+  return { kind: "ok", thread_id: resolved.entry.thread_id, model, ...(held ? { pending: { provider: selected.provider, id: selected.id } } : {}) }
 }
 
 /**

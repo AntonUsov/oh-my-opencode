@@ -29,7 +29,10 @@ const RENDER = {
     ...(result.current === null ? [] : [`current: ${modelLine(result.current)}`]),
     ...result.available.map((entry) => `${entry.provider}/${entry.id}  ${entry.name}  thinking ${entry.thinking_levels.join(",") || "-"}`),
   ],
-  "set-model": (result) => [`${result.thread_id}: ${modelLine(result.model)}`],
+  "set-model": (result) => [
+    `${result.thread_id}: ${modelLine(result.model)}`,
+    ...(result.pending === undefined || result.pending === null ? [] : [`model ${result.pending.provider}/${result.pending.id} pending until the engine applies it`]),
+  ],
   "set-reasoning": (result) => [`${result.thread_id}: thinking ${result.level} (${result.scope})`],
   send: (result) => [`${result.delivery?.kind ?? "sent"}: delivery ${result.delivery_id} to ${result.thread_id}${result.deduplicated ? " (already sent)" : ""}`],
   read: (result) => [

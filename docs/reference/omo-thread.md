@@ -108,7 +108,9 @@ A created session runs no first-run onboarding turn: its first turn is the creat
 switch to, with `current` its record: `{kind:"ok", thread_id|null, current: model|null, available:
 [{provider, id, name, thinking_levels}]}`. `set-model` switches a live session (the engine applies
 it from the next turn) with the same matching and refusals, plus `not_resumable` for a thread with
-no live owner. `set-reasoning` checks the level against the active model before anything changes
+no live owner. A switch the engine holds (compaction) answers the model it still runs with
+`pending: {provider, id}` naming the requested one, and the CLI prints that pending model on its
+own line. `set-reasoning` checks the level against the active model before anything changes
 (`thinking_level_unsupported` with `details.supported`); `--scope turn` changes only the current
 level, `session` (the default) also the model's remembered one. The reported `level` and the
 recorded `thinking_level` are the level the session runs after the change, as the engine reports it.

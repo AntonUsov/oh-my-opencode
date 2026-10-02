@@ -166,6 +166,13 @@ describe("omo thread: model control (#9425)", () => {
     expect(created.stdout).toBe("created dur-9 lane  model openai/gpt-x (high, set by config)\n")
     expect(listed.stdout).toBe("openai/gpt-x  GPT X  thinking low,high\n")
   })
+
+  test("#given a set-model the engine held for compaction #when printed for a person #then the pending switch is named on its own line", async () => {
+    const model = { provider: "anthropic", id: "", thinking_level: "high", provenance: "set", set_by: "user", reason: null }
+    const pending = { provider: "openai", id: "gpt-y" }
+    const result = await run(["set-model", "lane", "gpt-y"], fakeSdk({ setModel: { kind: "ok", thread_id: "dur-1", model, pending } }))
+    expect(result.stdout).toBe("dur-1: model anthropic/ (high, set by user)\nmodel openai/gpt-y pending until the engine applies it\n")
+  })
 })
 
 describe("omo thread: the connector outbox", () => {
