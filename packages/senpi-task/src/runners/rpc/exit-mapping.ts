@@ -17,11 +17,35 @@ export type ChildExitInput = {
  * what Node's `process.kill`/`taskkill /F` become there).
  */
 const WINDOWS_TERMINATION_EXIT_CODE = 1
-const WINDOWS_BUN_REAPER_ADVISORY = "child reaper unavailable under Bun on win32: children orphaned by a terminated worker thread stay as zombies until this"
+const WINDOWS_BUN_REAPER_ADVISORY_HEAD = "child reaper unavailable under Bun on win32: children orphaned by a terminated worker thread stay as zombies until this"
+/** The whole advisory senpi writes (`startHostChildReaper`), so a line cut short can be completed. */
+const WINDOWS_BUN_REAPER_ADVISORY = `${WINDOWS_BUN_REAPER_ADVISORY_HEAD} host exits`
 
+/** What is still owed of the advisory after `line`, or undefined when the line is not a cut-short copy. */
+function unfinishedAdvisoryTail(line: string): string | undefined {
+  if (line.length >= WINDOWS_BUN_REAPER_ADVISORY.length || !WINDOWS_BUN_REAPER_ADVISORY.startsWith(line)) return undefined
+  return WINDOWS_BUN_REAPER_ADVISORY.slice(line.length).trim()
+}
+
+/**
+ * True only when stderr is nothing but the advisory: one or more copies, each either on its own line
+ * or cut short and finished on the following line(s) with the advisory's own remaining words. Any
+ * other line - including a stray piece of the advisory with no cut-short head before it - is not the
+ * advisory, so the exit stays a crash.
+ */
 function hasOnlyWindowsStartupAdvisories(stderr: string): boolean {
-  const lines = stderr.trim().split(/\r?\n/).filter((line) => line.trim().length > 0)
-  return lines.length > 0 && lines.every((line) => line.startsWith(WINDOWS_BUN_REAPER_ADVISORY))
+  const lines = stderr.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0)
+  let owed: string | undefined
+  for (const line of lines) {
+    if (line.startsWith(WINDOWS_BUN_REAPER_ADVISORY_HEAD)) {
+      owed = unfinishedAdvisoryTail(line)
+    } else if (owed !== undefined && owed.startsWith(line)) {
+      owed = owed.slice(line.length).trim() || undefined
+    } else {
+      return false
+    }
+  }
+  return lines.length > 0
 }
 
 /**
