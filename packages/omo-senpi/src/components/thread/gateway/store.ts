@@ -20,7 +20,7 @@ import type {
   ReportOpResult,
   ToolReceiptBegin,
 } from "./store-relay-ops"
-import type { ObserveModelRequest, ObserveModelResult, SessionModelRecord, ThreadModel } from "./session-models"
+import type { ModelSetter, ObserveModelRequest, ObserveModelResult, SessionModelRecord, ThreadModel } from "./session-models"
 import type { DeliveryReceipt } from "./store-ops"
 import type { ClearEndpointRequest, RegisterIncarnationRequest, SessionOwner } from "./store-ownership"
 import type {
@@ -128,6 +128,8 @@ export type GatewayStore = StoreExtensionApi & {
   readonly recordSessionModelIfCurrent: (request: { readonly now: number; readonly durable_id: string; readonly expect_revision: number | null; readonly model: ThreadModel }) => Promise<{ readonly applied: boolean; readonly record: SessionModelRecord | null }>
   /** A new thinking level for a session with a model record; false when there is none. */
   readonly updateSessionThinking: (request: { readonly now: number; readonly durable_id: string; readonly thinking_level: string }) => Promise<boolean>
+  /** A held set-model's choice, waiting on the record until the switch lands (#9429); false without a record. */
+  readonly recordPendingSessionModel: (request: { readonly now: number; readonly durable_id: string; readonly provider: string; readonly id: string; readonly set_by: ModelSetter }) => Promise<boolean>
   /** The session's own `model_select`: keeps its record true and writes a fallback switch's milestone rows. */
   readonly observeModelSelect: (request: ObserveModelRequest) => Promise<ObserveModelResult>
   /** The model records of these sessions that exist, keyed by durable id; a plain read that takes no write lock. */
@@ -360,6 +362,7 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     recordSessionModel: (request) => call("record_session_model", request),
     recordSessionModelIfCurrent: (request) => call("record_session_model_if_current", request),
     updateSessionThinking: (request) => call("update_session_thinking", request),
+    recordPendingSessionModel: (request) => call("record_pending_session_model", request),
     observeModelSelect: (request) => call("observe_model_select", request),
     sessionModels: (durableIds) => call("session_models", durableIds),
     sessionModelRecord: (durableId) => call("session_model_record", durableId),

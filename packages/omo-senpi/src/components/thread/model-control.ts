@@ -269,6 +269,8 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
   const held = last?.ref === null || last === undefined ? true
     : last.held !== undefined ? last.held !== null && sameRef(last.held, requested)
     : !applied && sameRef(last.ref, before) && (revisionBefore === null || untouched)
+  // The held switch lands on a later turn as a plain switch; the record keeps this call's setter for it.
+  if (held) await options.store.recordPendingSessionModel({ now: (options.now ?? options.store.now)(), durable_id: resolved.entry.thread_id, ...requested, set_by: setBy })
   return { kind: "ok", thread_id: resolved.entry.thread_id, model, ...(held ? { pending: requested } : { superseded: requested }) }
 }
 

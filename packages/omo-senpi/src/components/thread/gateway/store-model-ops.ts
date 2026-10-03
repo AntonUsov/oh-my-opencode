@@ -9,7 +9,10 @@ import { fallbackMilestoneText, type ModelChange, type ModelProvenance, type Mod
 import { type StoreContext, transaction, write } from "./store-ops"
 import { expireDue, insertOutbox, selectBindings } from "./store-relay-ops"
 
-const COLUMNS = ["durable_id", "provider", "model_id", "thinking_level", "provenance", "set_by", "reason", "chosen_provider", "chosen_model_id", "chosen_provenance", "revision"] as const
+const COLUMNS = ["durable_id", "provider", "model_id", "thinking_level", "provenance", "set_by", "reason", "chosen_provider", "chosen_model_id", "chosen_provenance", "revision", "pending_provider", "pending_model_id", "pending_set_by"] as const
+
+/** Every model write clears a held set-model's choice: a switch that lands ends the engine's hold. */
+const CLEAR_PENDING = "pending_provider = NULL, pending_model_id = NULL, pending_set_by = NULL"
 
 function nullable(value: unknown): string | null {
   return value === null || value === undefined ? null : String(value)
@@ -50,7 +53,7 @@ function putModel(ctx: StoreContext, durableId: string, model: ThreadModel, now:
        chosen_model_id = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_model_id ELSE excluded.chosen_model_id END,
        chosen_provenance = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_provenance ELSE excluded.chosen_provenance END,
        updated_at = excluded.updated_at,
-       revision = session_models.revision + 1`,
+       revision = session_models.revision + 1, ${CLEAR_PENDING}`,
     [durableId, model.provider, model.id, model.thinking_level, model.provenance, model.set_by, model.reason, model.provider, model.id, model.provenance === "fallback" ? null : model.provenance, now],
   )
 }
@@ -84,6 +87,16 @@ export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { 
   })
 }
 
+/**
+ * A set-model the engine held: its choice waits on the record until the switch lands, so the session's
+ * observer can attribute the landed switch to this setter. It is not the record's model, so the
+ * revision does not move. False when the session has no record.
+ */
+export async function recordPendingSessionModel(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly provider: string; readonly id: string; readonly set_by: ModelSetter }): Promise<boolean> {
+  return await transaction(ctx, "record_pending_session_model", () =>
+    write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ? WHERE durable_id = ?", [request.provider, request.id, request.set_by, request.durable_id]) > 0)
+}
+
 /** A new thinking level for a session the gateway has a record of; false when it has none. */
 export async function updateSessionThinking(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly thinking_level: string }): Promise<boolean> {
   return await transaction(ctx, "update_session_thinking", () =>
@@ -96,7 +109,7 @@ function observe(ctx: StoreContext, request: ObserveModelRequest, row: SqlRow): 
   if (request.source === "fallback") {
     // A second fallback in the same window keeps the model the first one overrode.
     const chosen = row.provenance === "fallback" ? [row.chosen_provider, row.chosen_model_id, row.chosen_provenance] : [row.provider, row.model_id, row.provenance]
-    write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = 'fallback', reason = ?, chosen_provider = ?, chosen_model_id = ?, chosen_provenance = ?, updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [
+    write(ctx, `UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = 'fallback', reason = ?, chosen_provider = ?, chosen_model_id = ?, chosen_provenance = ?, updated_at = ?, revision = revision + 1, ${CLEAR_PENDING} WHERE durable_id = ?`, [
       ...to, thinking, request.reason, nullable(chosen[0]), nullable(chosen[1]), nullable(chosen[2]), request.now, request.durable_id,
     ])
     return
@@ -104,17 +117,19 @@ function observe(ctx: StoreContext, request: ObserveModelRequest, row: SqlRow): 
   if (request.source === "fallback-revert") {
     // The engine still switched: the revision moves, so a command holding an older read-back loses its swap.
     if (row.provenance !== "fallback") {
-      write(ctx, "UPDATE session_models SET updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [request.now, request.durable_id])
+      write(ctx, `UPDATE session_models SET updated_at = ?, revision = revision + 1, ${CLEAR_PENDING} WHERE durable_id = ?`, [request.now, request.durable_id])
       return
     }
-    write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = COALESCE(chosen_provenance, 'set'), reason = NULL, updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [...to, thinking, request.now, request.durable_id])
+    write(ctx, `UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = COALESCE(chosen_provenance, 'set'), reason = NULL, updated_at = ?, revision = revision + 1, ${CLEAR_PENDING} WHERE durable_id = ?`, [...to, thinking, request.now, request.durable_id])
     return
   }
   // `set` or `cycle`: an explicit switch. The gateway writes its own setter after the engine switched,
-  // so the switch the session observes for the model the record already names as set keeps that setter.
+  // so the switch the session observes for the model the record already names as set keeps that setter;
+  // a held set-model's switch landing takes the setter that call recorded as pending. Any other is the user's.
   const same = row.provider === request.to.provider && row.model_id === request.to.id && row.provenance === "set"
-  const setBy = same ? nullable(row.set_by) : "user"
-  write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = 'set', set_by = ?, reason = NULL, chosen_provider = ?, chosen_model_id = ?, chosen_provenance = 'set', updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [
+  const held = row.pending_provider === request.to.provider && row.pending_model_id === request.to.id
+  const setBy = same ? nullable(row.set_by) : held ? nullable(row.pending_set_by) : "user"
+  write(ctx, `UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = 'set', set_by = ?, reason = NULL, chosen_provider = ?, chosen_model_id = ?, chosen_provenance = 'set', updated_at = ?, revision = revision + 1, ${CLEAR_PENDING} WHERE durable_id = ?`, [
     ...to, thinking, setBy, ...to, request.now, request.durable_id,
   ])
 }

@@ -211,13 +211,27 @@ export const GATEWAY_MIGRATIONS: readonly (readonly string[])[] = [
       updated_at INTEGER NOT NULL
     )`,
     // Every core migration after v6 reserves the objects it creates, so no extension can register a
-    // name that prefixes them; objects an extension already owns keep their owner.
-    "INSERT OR IGNORE INTO extension_objects (type, name, owner) SELECT type, name, NULL FROM sqlite_schema",
+    // name that prefixes them. An object an extension already owns keeps its one row: the registry
+    // records extension objects in lower case while sqlite_schema keeps the DDL's case, so the match
+    // ignores case.
+    `INSERT OR IGNORE INTO extension_objects (type, name, owner)
+     SELECT s.type, s.name, NULL FROM sqlite_schema s
+     WHERE NOT EXISTS (SELECT 1 FROM extension_objects e WHERE e.type = s.type AND e.name = s.name COLLATE NOCASE)`,
   ],
   // v8 (#9429): a revision every write to a session's model record bumps. The command paths swap on
   // it, not on the row's values, so a writer holding an older read can never win after the record
   // moved and came back to the same values (A->B->A).
   ["ALTER TABLE session_models ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"],
+  // v9 (#9429): the choice of a set-model the engine held (`pending_*`), so the switch keeps its
+  // setter when it lands; any switch that lands clears it, as it clears the engine's hold. Also drops
+  // the second, core-owned row a case-sensitive v7 reservation added for a mixed-case extension object.
+  [
+    "ALTER TABLE session_models ADD COLUMN pending_provider TEXT",
+    "ALTER TABLE session_models ADD COLUMN pending_model_id TEXT",
+    "ALTER TABLE session_models ADD COLUMN pending_set_by TEXT CHECK (pending_set_by IS NULL OR pending_set_by IN ('config', 'user', 'lead'))",
+    `DELETE FROM extension_objects WHERE owner IS NULL AND EXISTS (
+       SELECT 1 FROM extension_objects e WHERE e.owner IS NOT NULL AND e.type = extension_objects.type AND e.name = extension_objects.name COLLATE NOCASE)`,
+  ],
 ]
 
 export const GATEWAY_TABLES = ["deliveries", "receipts", "causal_roots", "causal_edges", "rate_buckets", "session_meta", "bindings", "outbox", "gateway_meta", "outbox_cursors", "completion_arms", "extension_schema", "extension_objects", "session_models"] as const

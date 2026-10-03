@@ -906,4 +906,41 @@ describe("#9429 the command path and the session's own observer share one store"
     expect("superseded" in result).toBe(false)
     expect(await e.recorded()).toEqual(chosen)
   })
+
+  test("#given a set-model --set-by lead the engine holds for compaction #when the hold lands on a later turn #then the record names the requested model as set by lead", async () => {
+    const e = engineFixture()
+    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })
+    const shared = e.sharedSdk()
+    e.admission.hold = true
+    expect(await shared.sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "lead" })).toMatchObject({ kind: "ok", pending: GPT_Y })
+    await e.settle()
+    e.admission.hold = false
+    const landed = e.observed()
+    // The engine's own apply of a held switch (_applyPendingModelSwitch): a "set" switch that may not defer again.
+    await e.engine._switchActiveModel(GPT_Y_MODEL, { persistDefault: false, appendSessionEntry: true, emitModelSelect: true, modelSelectSource: "set", invalidateCompaction: true, allowDeferral: false })
+    await e.settle()
+    await landed
+    expect(e.engine.model).toMatchObject(GPT_Y)
+    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "lead" })
+  })
+
+  test("#given a held set-model --set-by lead #when the user lands another switch first and then picks the held model himself #then the held choice is gone and that pick is the user's", async () => {
+    const e = engineFixture()
+    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })
+    const shared = e.sharedSdk()
+    e.admission.hold = true
+    expect(await shared.sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "lead" })).toMatchObject({ kind: "ok", pending: GPT_Y })
+    await e.settle()
+    e.admission.hold = false
+    const away = e.observed()
+    await e.userSwitch(CLAUDE_MODEL)
+    await e.settle()
+    await away
+    expect(await e.recorded()).toMatchObject({ ...CLAUDE, provenance: "set", set_by: "config" })
+    const back = e.observed()
+    await e.userSwitch(GPT_Y_MODEL)
+    await e.settle()
+    await back
+    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "user" })
+  })
 })

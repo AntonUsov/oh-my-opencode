@@ -120,6 +120,8 @@ not); a session the gateway has no record of yet cannot show that, so there a sw
 switch straight back reads as `pending`. A host whose state names no model is refused `unsupported`
 before anything switches. `--set-by` is recorded only on
 the model this call asked for; a held or superseded switch leaves the running model's own record.
+A held switch that lands on a later turn is recorded with this call's `--set-by`; any switch that
+lands first (a `/model` in the session, a fallback) drops that choice.
 Concurrent `set-model` and `set-reasoning` calls on one session never leave the record behind the
 engine: each write swaps on the record's revision, which every write bumps. `set-reasoning` checks the level against the active model before anything changes
 (`thinking_level_unsupported` with `details.supported`); `--scope turn` changes only the current
