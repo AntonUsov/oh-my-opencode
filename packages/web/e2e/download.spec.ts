@@ -143,9 +143,15 @@ test.describe("Download page", () => {
       "3".repeat(64),
     )
     await expect(page.getByRole("heading", { name: "Verify your download" })).toBeVisible()
-    await expect(page.locator("pre code", { hasText: "Get-FileHash" })).toBeVisible()
-    await expect(page.locator("pre code", { hasText: "shasum -a 256" })).toBeVisible()
-    await expect(page.locator("pre code", { hasText: "sha256sum" })).toBeVisible()
+    await expect(
+      page.locator("pre code", { hasText: "Get-FileHash OmO-0.1.0-x64.exe" }),
+    ).toBeVisible()
+    await expect(
+      page.locator("pre code", { hasText: "shasum -a 256 OmO-0.1.0-arm64.dmg" }),
+    ).toBeVisible()
+    await expect(
+      page.locator("pre code", { hasText: "sha256sum OmO-0.1.0-amd64.deb" }),
+    ).toBeVisible()
   })
 
   test("the release notes link stays on the download host and no link goes to GitHub", async ({

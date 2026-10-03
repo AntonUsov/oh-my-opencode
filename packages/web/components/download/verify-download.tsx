@@ -11,10 +11,10 @@ const COMMANDS: Readonly<Record<VerifyOs, (file: string) => string>> = {
 const ORDER: readonly VerifyOs[] = ["macos", "windows", "linux"]
 
 export function VerifyDownload({
-  fileName,
+  fileNames,
   checksumsUrl,
 }: {
-  readonly fileName: string
+  readonly fileNames: Readonly<Record<VerifyOs, string>>
   readonly checksumsUrl: string
 }): JSX.Element {
   const t = useTranslations("download.verify")
@@ -28,7 +28,7 @@ export function VerifyDownload({
           <div key={os} className="border-line bg-ink-1 min-w-0 border p-4">
             <p className="eyebrow text-text-lo">{t(os)}</p>
             <pre className="mt-3 overflow-x-auto font-mono text-sm leading-[1.55]">
-              <code className="text-text-hi">{COMMANDS[os](fileName)}</code>
+              <code className="text-text-hi">{COMMANDS[os](fileNames[os])}</code>
             </pre>
           </div>
         ))}

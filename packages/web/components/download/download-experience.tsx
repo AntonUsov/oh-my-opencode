@@ -16,7 +16,9 @@ import {
   chooseInstallers,
   type ChannelState,
   type DesktopChannel,
+  type DesktopOs,
   type DesktopRelease,
+  type InstallerChoice,
 } from "@/lib/desktop-download"
 import { cn } from "@/lib/utils"
 
@@ -62,12 +64,28 @@ function ChannelSwitch({
   )
 }
 
+function fileNameFor(
+  os: DesktopOs,
+  release: DesktopRelease,
+  choice: InstallerChoice | null,
+): string {
+  const installer =
+    choice?.primary?.os === os
+      ? choice.primary
+      : chooseInstallers(release, { os, arch: null, device: "computer" }).primary
+  return installer?.fileName ?? "<installer>"
+}
+
 function ReleaseBody({ release }: { readonly release: DesktopRelease }): JSX.Element {
   const t = useTranslations("download")
   const visitor = useDesktopVisitor()
   const choice = visitor === null ? null : chooseInstallers(release, visitor)
   const listed = release.installers
-  const fileName = choice?.primary?.fileName ?? listed[0]?.fileName ?? ""
+  const fileNames = {
+    macos: fileNameFor("macos", release, choice),
+    windows: fileNameFor("windows", release, choice),
+    linux: fileNameFor("linux", release, choice),
+  }
 
   return (
     <>
@@ -79,7 +97,7 @@ function ReleaseBody({ release }: { readonly release: DesktopRelease }): JSX.Ele
         <InstallerList installers={listed} />
       </section>
       <section className="mt-16">
-        <VerifyDownload fileName={fileName} checksumsUrl={release.checksumsUrl} />
+        <VerifyDownload fileNames={fileNames} checksumsUrl={release.checksumsUrl} />
       </section>
     </>
   )
