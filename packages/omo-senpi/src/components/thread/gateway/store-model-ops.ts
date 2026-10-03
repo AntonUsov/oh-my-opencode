@@ -94,7 +94,11 @@ function observe(ctx: StoreContext, request: ObserveModelRequest, row: SqlRow): 
     return
   }
   if (request.source === "fallback-revert") {
-    if (row.provenance !== "fallback") return
+    // The engine still switched: the revision moves, so a command holding an older read-back loses its swap.
+    if (row.provenance !== "fallback") {
+      write(ctx, "UPDATE session_models SET updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [request.now, request.durable_id])
+      return
+    }
     write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = COALESCE(chosen_provenance, 'set'), reason = NULL, updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [...to, thinking, request.now, request.durable_id])
     return
   }

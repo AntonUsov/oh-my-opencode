@@ -170,6 +170,9 @@ describe("schema migration v6 -> v7", () => {
     expect(await store.updateSessionThinking({ now: h.clock.now, durable_id: "B", thinking_level: "medium" })).toBe(true)
     await store.recordSessionModel({ now: h.clock.now, durable_id: "B", model: y })
     expect((await store.sessionModelRecord("B"))?.revision).toBe(5)
+    // A revert the record does not need still moved the engine, so it still moves the revision.
+    await store.observeModelSelect({ now: h.clock.now, durable_id: "B", to: { provider: "openai", id: "gpt-y" }, from: null, thinking_level: null, source: "fallback-revert", reason: null })
+    expect(await store.sessionModelRecord("B")).toEqual({ model: y, revision: 6 })
     expect(await store.recordSessionModelIfCurrent({ now: h.clock.now, durable_id: "C", expect_revision: null, model: x })).toEqual({ applied: true, record: { model: x, revision: 1 } })
     expect(await store.recordSessionModelIfCurrent({ now: h.clock.now, durable_id: "C", expect_revision: null, model: y })).toEqual({ applied: false, record: { model: x, revision: 1 } })
   })

@@ -113,8 +113,12 @@ no live owner. A switch the engine holds (compaction) answers the model it still
 own line. A switch another switch replaced before this call read the engine back (another client's
 `set-model`, a `/model` in the session) answers the model the engine runs with `superseded:
 {provider, id}` naming the requested one instead: it will not apply. An engine whose `get_state`
-reports its held switch (`pendingModelSwitch`) decides between the two; on an engine that does not,
-a switch replaced by a switch straight back to the model from before it reads as `pending`. `--set-by` is recorded only on
+reports its held switch (`pendingModelSwitch`) decides between the two. On an engine that does not,
+a read-back still naming the model from before the switch is `pending` only when nothing wrote the
+session's record in between (a switch that lands is recorded by the session itself, a held one is
+not); a session the gateway has no record of yet cannot show that, so there a switch replaced by a
+switch straight back reads as `pending`. A host whose state names no model is refused `unsupported`
+before anything switches. `--set-by` is recorded only on
 the model this call asked for; a held or superseded switch leaves the running model's own record.
 Concurrent `set-model` and `set-reasoning` calls on one session never leave the record behind the
 engine: each write swaps on the record's revision, which every write bumps. `set-reasoning` checks the level against the active model before anything changes

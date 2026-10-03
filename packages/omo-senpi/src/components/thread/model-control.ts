@@ -142,21 +142,32 @@ async function persistEngineState(
   durableId: string,
   readState: () => Promise<unknown>,
   build: (read: EngineRead, current: ThreadModel | null) => ThreadModel | null,
-): Promise<{ readonly row: ThreadModel | null; readonly reads: readonly EngineRead[] }> {
+): Promise<{ readonly row: ThreadModel | null; readonly reads: readonly EngineRead[]; readonly swappedFrom?: number | null }> {
   let record = await options.store.sessionModelRecord(durableId)
   const reads: EngineRead[] = []
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  let confirming = false
+  let swappedFrom: number | null | undefined
+  for (let attempt = 0; attempt < 6; attempt += 1) {
     const state = await readState()
     const held = stateHeld(state)
     const read: EngineRead = { ref: stateModel(state), thinking: stateThinking(state), ...(held === undefined ? {} : { held }) }
     reads.push(read)
     const model: ThreadModel | null = build(read, record?.model ?? null)
-    if (model === null) return { row: record?.model ?? null, reads }
-    const result = await options.store.recordSessionModelIfCurrent({ now: (options.now ?? options.store.now)(), durable_id: durableId, expect_revision: record?.revision ?? null, model })
-    if (result.applied) return { row: model, reads }
+    if (model === null) return { row: record?.model ?? null, reads, swappedFrom }
+    const created = record === null
+    const expected = record?.revision ?? null
+    const result = await options.store.recordSessionModelIfCurrent({ now: (options.now ?? options.store.now)(), durable_id: durableId, expect_revision: expected, model })
     record = result.record
+    if (!result.applied) continue
+    swappedFrom ??= expected
+    // A session without a record has no writer to fence a read-back that went stale before this
+    // write: the session's own observer records nothing for it. Once this call created the record,
+    // every later change is written by someone, so one more read-back - answered after the record
+    // existed - is enough to catch a change this call's first read missed.
+    if (!created || confirming) return { row: model, reads, swappedFrom }
+    confirming = true
   }
-  return { row: record?.model ?? null, reads }
+  return { row: record?.model ?? null, reads, swappedFrom }
 }
 
 /**
@@ -223,34 +234,41 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
   const port = sessionPort(options, session)
   const matched = matchModel(await port.getAvailableModels(routingId(session)), input.model, input.provider)
   if (matched.kind === "error") return matched
-  // What the engine runs before this switch: a read-back still naming it is a held switch, any other
-  // model is another switch that superseded this one.
-  const before = stateModel(await port.getState(routingId(session)))
+  // What the engine runs before this switch, and the record's revision then: a read-back still
+  // naming that model with no write landing in between is a held switch; anything else that is not
+  // the requested model is another switch that superseded this one.
+  const state = await port.getState(routingId(session))
+  const before = stateModel(state)
+  // Without the running model there is nothing true to record: the set_model reply echoes the request even when the engine holds it.
+  if (before === null) return failure("unsupported", "This host does not report the model its session runs.", "Upgrade the host, or switch the model inside the session.") as Failure
+  const revisionBefore = (await options.store.sessionModelRecord(resolved.entry.thread_id))?.revision ?? null
   const selected = await port.setModel(routingId(session), matched.entry.provider, matched.entry.id)
   const requested: ModelRef = { provider: selected.provider, id: selected.id }
-  const { row, reads } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (read, current) => {
-    // The set_model reply echoes the requested model even when the engine held the switch; the
-    // read-back names what the engine runs. A host whose state carries no model falls back to it.
-    const ref = read.ref ?? requested
+  const { row, reads, swappedFrom } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (read, current) => {
+    // A read-back that names no model cannot confirm anything: the record is left as it is.
+    if (read.ref === null) return null
     const thinking_level = read.thinking ?? current?.thinking_level ?? null
     // Only the model this call asked for is this caller's choice. A held switch's previous model, or
     // another caller's switch, keeps the record's own attribution when the record names it; else it is
     // attributed as the session's observer attributes an explicit switch nobody recorded.
-    if (sameRef(ref, requested)) return { ...ref, thinking_level, provenance: "set", set_by: setBy, reason: null }
-    if (current !== null && sameRef(current, ref)) return { ...current, thinking_level }
-    return { ...ref, thinking_level, provenance: "set", set_by: "user", reason: null }
+    if (sameRef(read.ref, requested)) return { ...read.ref, thinking_level, provenance: "set", set_by: setBy, reason: null }
+    if (current !== null && sameRef(current, read.ref)) return { ...current, thinking_level }
+    return { ...read.ref, thinking_level, provenance: "set", set_by: "user", reason: null }
   })
-  const model = row ?? { ...requested, thinking_level: null, provenance: "set", set_by: setBy, reason: null }
-  if (sameRef(model, requested)) return { kind: "ok", thread_id: resolved.entry.thread_id, model }
+  const last = reads.at(-1)
+  const model = row ?? { ...(last?.ref ?? before), thinking_level: last?.thinking ?? null, provenance: "set", set_by: "user", reason: null }
+  if (last?.ref !== null && last?.ref !== undefined && sameRef(model, requested) && sameRef(last.ref, requested)) return { kind: "ok", thread_id: resolved.entry.thread_id, model }
   // Not applied: the ok result names what runs and the requested model. `pending` is a switch the
   // engine holds and applies from a later turn; `superseded` is one another switch replaced, which will
-  // not apply. A host that reports its held switch answers that directly. Without it, a read-back still
-  // naming the model from before the switch counts as held, and any other model (or a read that already
-  // showed the requested one) as superseded; a switch replaced by a switch straight back to the model
-  // from before it reads as held there, because get_state alone cannot tell the two apart.
-  const last = reads.at(-1)
+  // not apply. A host that reports its held switch answers that directly. Otherwise a read-back still
+  // naming the model from before is held only when nothing wrote the record meanwhile: a switch that
+  // landed is written by the session's own observer, a held one is not. A read-back that named no
+  // model confirms nothing and answers pending.
   const applied = reads.some((read) => read.ref !== null && sameRef(read.ref, requested))
-  const held = last?.held !== undefined ? last.held !== null && sameRef(last.held, requested) : !applied && (before === null || sameRef(model, before))
+  const untouched = revisionBefore !== null && swappedFrom === revisionBefore
+  const held = last?.ref === null || last === undefined ? true
+    : last.held !== undefined ? last.held !== null && sameRef(last.held, requested)
+    : !applied && sameRef(last.ref, before) && (revisionBefore === null || untouched)
   return { kind: "ok", thread_id: resolved.entry.thread_id, model, ...(held ? { pending: requested } : { superseded: requested }) }
 }
 
