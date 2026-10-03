@@ -210,6 +210,9 @@ export const GATEWAY_MIGRATIONS: readonly (readonly string[])[] = [
       chosen_provenance TEXT CHECK (chosen_provenance IS NULL OR chosen_provenance IN ('auto', 'set')),
       updated_at INTEGER NOT NULL
     )`,
+    // Every core migration after v6 reserves the objects it creates, so no extension can register a
+    // name that prefixes them; objects an extension already owns keep their owner.
+    "INSERT OR IGNORE INTO extension_objects (type, name, owner) SELECT type, name, NULL FROM sqlite_schema",
   ],
   // v8 (#9429): a revision every write to a session's model record bumps. The command paths swap on
   // it, not on the row's values, so a writer holding an older read can never win after the record

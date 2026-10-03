@@ -19,6 +19,20 @@ const extension = (name = "alpha"): StoreExtensionRegistration => ({
 const bind = { principal: "connector:test", binding: { platform: "custom", account_id: "bot", chat_id: "chat", session_durable_id: "target", ttl_seconds: null } }
 
 describe("store extension migrations", () => {
+  test("#given a core table added after the v6 snapshot #when an extension takes its name #then registration is refused and the table stays core", async () => {
+    const h = (harness = createGatewayHarness())
+    const store = h.store()
+    const result = await store.registerStoreExtension(extension("session_models"))
+    expect(result).toMatchObject({ kind: "refused", code: "extension_schema_violation" })
+    const db = new Database(gatewayDatabasePath(h.agentDir), { readonly: true })
+    try {
+      expect(db.query("SELECT owner FROM extension_objects WHERE type = 'table' AND name = 'session_models'").get()).toEqual({ owner: null })
+      expect(db.query("SELECT name FROM extension_schema").all()).toEqual([])
+    } finally {
+      db.close()
+    }
+  })
+
   test("#given an extension #when registered and called repeatedly #then its migration applies once and core version stays five", async () => {
     const h = (harness = createGatewayHarness())
     const store = h.store()
