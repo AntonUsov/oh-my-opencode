@@ -34,14 +34,22 @@ function selectModel(ctx: StoreContext, durableId: string): SqlRow | undefined {
   return ctx.sql.one([...COLUMNS], `SELECT ${COLUMNS.join(", ")} FROM session_models WHERE durable_id = ?`, [durableId])
 }
 
+/**
+ * Writes `model` as the record. A `fallback` record keeps the choice it overrode (`chosen_*`), so a
+ * command that rewrites a session on its fallback model - a level change, a held or superseded
+ * switch - leaves the engine's fallback-revert something true to return to.
+ */
 function putModel(ctx: StoreContext, durableId: string, model: ThreadModel, now: number): void {
   write(
     ctx,
     `INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at, revision)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
      ON CONFLICT(durable_id) DO UPDATE SET provider = excluded.provider, model_id = excluded.model_id, thinking_level = excluded.thinking_level,
-       provenance = excluded.provenance, set_by = excluded.set_by, reason = excluded.reason, chosen_provider = excluded.chosen_provider,
-       chosen_model_id = excluded.chosen_model_id, chosen_provenance = excluded.chosen_provenance, updated_at = excluded.updated_at,
+       provenance = excluded.provenance, set_by = excluded.set_by, reason = excluded.reason,
+       chosen_provider = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_provider ELSE excluded.chosen_provider END,
+       chosen_model_id = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_model_id ELSE excluded.chosen_model_id END,
+       chosen_provenance = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_provenance ELSE excluded.chosen_provenance END,
+       updated_at = excluded.updated_at,
        revision = session_models.revision + 1`,
     [durableId, model.provider, model.id, model.thinking_level, model.provenance, model.set_by, model.reason, model.provider, model.id, model.provenance === "fallback" ? null : model.provenance, now],
   )

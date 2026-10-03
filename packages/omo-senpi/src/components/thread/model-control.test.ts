@@ -875,6 +875,24 @@ describe("#9429 the command path and the session's own observer share one store"
     expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "lead" })
   })
 
+  test("#given a session on its fallback model #when a set-reasoning rewrites its record and the engine then reverts #then the record reads the original provenance again", async () => {
+    const e = engineFixture()
+    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "auto", set_by: null, reason: null })
+    await e.providerError("429 rate_limit_error")
+    const fell = e.observed()
+    await e.runtimeSwitch(GPT_Y_MODEL, "fallback")
+    await e.settle()
+    await fell
+    const shared = e.sharedSdk()
+    expect(await shared.sdk.setReasoning({ thread: "lane", level: "high" })).toMatchObject({ kind: "ok" })
+    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "fallback" })
+    const reverted = e.observed()
+    await e.runtimeSwitch(CLAUDE_MODEL, "fallback-revert")
+    await e.settle()
+    await reverted
+    expect(await e.recorded()).toEqual({ ...CLAUDE, thinking_level: "high", provenance: "auto", set_by: null, reason: null })
+  })
+
   test("#given a set-model the engine holds for compaction #when the SDK call returns #then the record keeps the running model's own setter and the result says pending, not superseded", async () => {
     const e = engineFixture()
     const chosen: GatewayStoreModel = { ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null }
