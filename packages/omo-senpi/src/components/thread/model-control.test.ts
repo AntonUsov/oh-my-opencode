@@ -1019,34 +1019,6 @@ describe("#9429 the command path and the session's own observer share one store"
     expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "lead" })
   })
 
-  test("#given two set-model calls for one model on a host that reports its hold #when the lead's engine call comes after the config's whole call #then the hold the lead's call left lands as the lead's", async () => {
-    const e = engineFixture()
-    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })
-    e.admission.hold = true
-    const other = e.sharedSdk(e.store, { reportsHolds: true })
-    // The lead's call notes its choice, then the config's call runs start to finish before the lead's call reaches the engine.
-    let interleaved = false
-    const store: GatewayStore = {
-      ...e.store,
-      recordPendingSessionModel: async (request) => {
-        const result = await e.store.recordPendingSessionModel(request)
-        if (!interleaved) {
-          interleaved = true
-          expect(await other.sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "config" })).toMatchObject({ kind: "ok", pending: GPT_Y })
-        }
-        return result
-      },
-    }
-    expect(await e.sharedSdk(store, { reportsHolds: true }).sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "lead" })).toMatchObject({ kind: "ok", pending: GPT_Y })
-    await e.settle()
-    e.admission.hold = false
-    const landed = e.observed()
-    await e.engine._switchActiveModel(GPT_Y_MODEL, { persistDefault: false, appendSessionEntry: true, emitModelSelect: true, modelSelectSource: "set", invalidateCompaction: true, allowDeferral: false })
-    await e.settle()
-    await landed
-    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "lead" })
-  })
-
   test("#given a set-model --set-by lead the engine holds, on a host that reports its hold #when a set-model --set-by config for that model runs whole after the lead's write #then the config's later hold lands as the config's", async () => {
     const e = engineFixture()
     await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })

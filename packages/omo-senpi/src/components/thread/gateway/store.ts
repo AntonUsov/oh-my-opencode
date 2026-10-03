@@ -129,7 +129,7 @@ export type GatewayStore = StoreExtensionApi & {
   /** A new thinking level for a session with a model record; false when there is none. */
   readonly updateSessionThinking: (request: { readonly now: number; readonly durable_id: string; readonly thinking_level: string }) => Promise<boolean>
   /** A set-model's choice, noted before it asks the engine and waiting on the record until the switch lands (#9429); `previous` is the choice it replaced. */
-  readonly recordPendingSessionModel: (request: PendingChoice & { readonly now: number; readonly durable_id: string; readonly expect_revision?: number }) => Promise<{ readonly recorded: boolean; readonly previous: PendingChoice | null }>
+  readonly recordPendingSessionModel: (request: PendingChoice & { readonly now: number; readonly durable_id: string }) => Promise<{ readonly recorded: boolean; readonly previous: PendingChoice | null }>
   /** Replaces that choice with `next` (null clears it) only while the record still holds `expect`. */
   readonly replacePendingSessionModel: (request: { readonly durable_id: string; readonly expect: PendingChoice; readonly next: PendingChoice | null }) => Promise<boolean>
   /** The session's own `model_select`: keeps its record true and writes a fallback switch's milestone rows. */
