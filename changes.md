@@ -16,7 +16,6 @@ The bundled Hephaestus rule's `multi_agent_v2` `spawn_agent` example (`component
 
 `ulw-loop/test/spawn-role-registered.test.ts` covers project roles from a nested cwd, keying by declared name, a role file without a name field, `CODEX_HOME` roles in both forms, and the denials (no role file, no `agent_type`, a role registered only in another project). Five of its eight cases fail on `dev`. `spawn-role-matrix.test.ts` now isolates `CODEX_HOME`.
 
-||||||| parent of 9097adcda (feat(web): omo.dev/download with OS detection, checksums and verify steps)
 ## 2026-10-03 - OpenCode executes tool-argument rewrites on the original object (#9448)
 
 `replaceToolArgs` replaced `output.args` with a shallow clone, but OpenCode executes tools with the argument object it retained before calling `tool.execute.before`. The patch never reached that object, and later plugins edited a detached copy. The helper now merges patches into mutable arguments in place, so both OmO's rewrites and later hooks' edits reach tool execution. All 12 OpenCode call sites are unchanged.
