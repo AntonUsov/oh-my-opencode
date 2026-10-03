@@ -113,34 +113,39 @@ function stateModel(state: unknown): ModelRef | null {
 
 type EngineRead = { readonly ref: ModelRef | null; readonly thinking: string | null }
 
+function sameRef(a: ModelRef, b: ModelRef): boolean {
+  return a.provider === b.provider && a.id === b.id
+}
+
 /**
  * Persist what the engine actually runs, never what was asked for (#9429 B1/B2). The state read-back
  * after the change names the engine's current model and level: a switch the engine holds for
- * compaction reads back as the previous model, so the record keeps it (pending by construction)
- * instead of claiming the unadmitted candidate. The write itself is a compare-and-swap against the
- * row this call read before it touched the engine: a concurrent caller - or the session's own
- * observed switch - that landed in between makes the swap fail, the engine is re-read, and the
- * fresher truth wins. The stored state can never go backwards to an earlier engine state.
+ * compaction reads back as the previous model, so the record keeps it instead of claiming the
+ * unadmitted candidate. The write is a compare-and-swap on the record's revision, read before the
+ * engine is: a concurrent caller - or the session's own observed switch - that wrote in between makes
+ * the swap fail, the engine is re-read, and the fresher truth wins. The write is made even when it
+ * changes no value, because it is what moves the revision past an older caller still holding a
+ * read-back from before this one; a value compare would let that caller win after A->B->A.
  */
 async function persistEngineState(
   options: ThreadToolSurfaceOptions,
   durableId: string,
   readState: () => Promise<unknown>,
   build: (read: EngineRead, current: ThreadModel | null) => ThreadModel | null,
-): Promise<{ readonly row: ThreadModel | null; readonly read: EngineRead }> {
-  let current: ThreadModel | null = (await options.store.sessionModels([durableId]))[durableId] ?? null
-  let read: EngineRead = { ref: null, thinking: null }
+): Promise<{ readonly row: ThreadModel | null; readonly reads: readonly EngineRead[] }> {
+  let record = await options.store.sessionModelRecord(durableId)
+  const reads: EngineRead[] = []
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const state = await readState()
-    read = { ref: stateModel(state), thinking: stateThinking(state) }
-    const model: ThreadModel | null = build(read, current)
-    if (model === null) return { row: current, read }
-    if (current !== null && current.provider === model.provider && current.id === model.id && current.thinking_level === model.thinking_level) return { row: current, read }
-    const result = await options.store.recordSessionModelIfCurrent({ now: (options.now ?? options.store.now)(), durable_id: durableId, expect: current, model })
-    if (result.applied) return { row: model, read }
-    current = result.current
+    const read: EngineRead = { ref: stateModel(state), thinking: stateThinking(state) }
+    reads.push(read)
+    const model: ThreadModel | null = build(read, record?.model ?? null)
+    if (model === null) return { row: record?.model ?? null, reads }
+    const result = await options.store.recordSessionModelIfCurrent({ now: (options.now ?? options.store.now)(), durable_id: durableId, expect_revision: record?.revision ?? null, model })
+    if (result.applied) return { row: model, reads }
+    record = result.record
   }
-  return { row: current, read }
+  return { row: record?.model ?? null, reads }
 }
 
 /**
@@ -193,8 +198,11 @@ export async function createThread(options: ThreadToolSurfaceOptions, current: T
   return { kind: "ok", thread: { ...thread, model }, deduplicated: false }
 }
 
+/** A set-model the engine did not apply names the requested model as `pending` (held) or `superseded` (replaced by another switch). */
+export type SetModelOk = { readonly kind: "ok"; readonly thread_id: string; readonly model: ThreadModel; readonly pending?: ModelRef; readonly superseded?: ModelRef }
+
 /** `thread_set_model` / `omo thread set-model`: the switch the engine applies from the next turn, recorded as set by `setBy`. */
-export async function setThreadModel(options: ThreadToolSurfaceOptions, current: ThreadHostView, input: { readonly thread: string; readonly model: string; readonly provider?: string; readonly all_scope?: boolean }, callerId: string, setBy: unknown): Promise<{ readonly kind: "ok"; readonly thread_id: string; readonly model: ThreadModel; readonly pending?: ModelRef } | Failure> {
+export async function setThreadModel(options: ThreadToolSurfaceOptions, current: ThreadHostView, input: { readonly thread: string; readonly model: string; readonly provider?: string; readonly all_scope?: boolean }, callerId: string, setBy: unknown): Promise<SetModelOk | Failure> {
   if (!isModelSetter(setBy)) return badSetter(setBy)
   const resolved = resolution(options, resolveEntries(options, current), input.thread, callerId, input.all_scope)
   if (resolved.kind === "error") return { kind: "error", error: resolved }
@@ -204,19 +212,32 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
   const port = sessionPort(options, session)
   const matched = matchModel(await port.getAvailableModels(routingId(session)), input.model, input.provider)
   if (matched.kind === "error") return matched
+  // What the engine runs before this switch: a read-back still naming it is a held switch, any other
+  // model is another switch that superseded this one.
+  const before = stateModel(await port.getState(routingId(session)))
   const selected = await port.setModel(routingId(session), matched.entry.provider, matched.entry.id)
-  const { row } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (read, current) => {
+  const requested: ModelRef = { provider: selected.provider, id: selected.id }
+  const { row, reads } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (read, current) => {
     // The set_model reply echoes the requested model even when the engine held the switch; the
     // read-back names what the engine runs. A host whose state carries no model falls back to it.
-    const ref = read.ref ?? { provider: selected.provider, id: selected.id }
-    return { ...ref, thinking_level: read.thinking ?? current?.thinking_level ?? null, provenance: "set", set_by: setBy, reason: null }
+    const ref = read.ref ?? requested
+    const thinking_level = read.thinking ?? current?.thinking_level ?? null
+    // Only the model this call asked for is this caller's choice. A held switch's previous model, or
+    // another caller's switch, keeps the record's own attribution when the record names it; else it is
+    // attributed as the session's observer attributes an explicit switch nobody recorded.
+    if (sameRef(ref, requested)) return { ...ref, thinking_level, provenance: "set", set_by: setBy, reason: null }
+    if (current !== null && sameRef(current, ref)) return { ...current, thinking_level }
+    return { ...ref, thinking_level, provenance: "set", set_by: "user", reason: null }
   })
-  const model = row ?? { provider: selected.provider, id: selected.id, thinking_level: null, provenance: "set", set_by: setBy, reason: null }
-  // A switch the engine held reads back as the previous model: the ok result names what runs and
-  // marks the requested model pending, so the tool, the SDK and the CLI can say the switch is held
-  // instead of answering the previous model with no explanation.
-  const held = model.provider !== selected.provider || model.id !== selected.id
-  return { kind: "ok", thread_id: resolved.entry.thread_id, model, ...(held ? { pending: { provider: selected.provider, id: selected.id } } : {}) }
+  const model = row ?? { ...requested, thinking_level: null, provenance: "set", set_by: setBy, reason: null }
+  if (sameRef(model, requested)) return { kind: "ok", thread_id: resolved.entry.thread_id, model }
+  // Not applied: the ok result names what runs and the requested model. `pending` is a switch the
+  // engine holds (the read-back is still the model from before it) and applies from a later turn;
+  // `superseded` is one another switch replaced - it applied and was switched away from, or the engine
+  // now runs a third model - and it will not apply.
+  const applied = reads.some((read) => read.ref !== null && sameRef(read.ref, requested))
+  const held = !applied && (before === null || sameRef(model, before))
+  return { kind: "ok", thread_id: resolved.entry.thread_id, model, ...(held ? { pending: requested } : { superseded: requested }) }
 }
 
 /**
@@ -244,7 +265,7 @@ export async function setThreadReasoning(options: ThreadToolSurfaceOptions, curr
     if (!(error instanceof Error) || !error.message.startsWith("thinking_level_unsupported:")) throw error
     return unsupportedThinking(input.level, await port.getAvailableThinkingLevels(routingId(session)))
   }
-  const { read } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (engine, current) => {
+  const { reads } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (engine, current) => {
     // A record is only adjusted, never created, here; a model that changed mid-call is the switch's
     // own record to write. A host whose state names no level gives nothing true to record.
     const level = engine.thinking !== null && isThinkingLevel(engine.thinking) ? engine.thinking : null
@@ -252,7 +273,7 @@ export async function setThreadReasoning(options: ThreadToolSurfaceOptions, curr
     if (engine.ref !== null && (engine.ref.provider !== current.provider || engine.ref.id !== current.id)) return null
     return { provider: current.provider, id: current.id, thinking_level: level, provenance: current.provenance, set_by: current.set_by, reason: current.reason }
   })
-  const reported = read.thinking
+  const reported = reads.at(-1)?.thinking ?? null
   // A host whose state names no level gives nothing true to record; the request is echoed and the record left as it was.
   const effective = reported !== null && isThinkingLevel(reported) ? reported : undefined
   return { kind: "ok", thread_id: resolved.entry.thread_id, level: (effective ?? input.level) as (typeof THINKING_LEVELS)[number], scope: input.scope === "turn" ? "turn" : "session" }

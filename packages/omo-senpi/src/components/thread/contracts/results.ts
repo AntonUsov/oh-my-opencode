@@ -118,6 +118,8 @@ export type ThreadSetModelResult =
       readonly model: { readonly provider: string; readonly id: string }
       /** The requested model when the engine held the switch (compaction): it applies from a later turn. */
       readonly pending?: { readonly provider: string; readonly id: string }
+      /** The requested model when another switch replaced it: it will not apply. */
+      readonly superseded?: { readonly provider: string; readonly id: string }
     }
   | ThreadDataError
 

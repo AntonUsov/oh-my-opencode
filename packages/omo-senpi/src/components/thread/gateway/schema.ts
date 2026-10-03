@@ -211,6 +211,10 @@ export const GATEWAY_MIGRATIONS: readonly (readonly string[])[] = [
       updated_at INTEGER NOT NULL
     )`,
   ],
+  // v7 (#9429): a revision every write to a session's model record bumps. The command paths swap on
+  // it, not on the row's values, so a writer holding an older read can never win after the record
+  // moved and came back to the same values (A->B->A).
+  ["ALTER TABLE session_models ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"],
 ]
 
 export const GATEWAY_TABLES = ["deliveries", "receipts", "causal_roots", "causal_edges", "rate_buckets", "session_meta", "bindings", "outbox", "gateway_meta", "outbox_cursors", "completion_arms", "extension_schema", "extension_objects", "session_models"] as const

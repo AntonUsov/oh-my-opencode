@@ -5,11 +5,11 @@
  * its revert) and writes one `milestone` row per outbound binding for a fallback switch.
  */
 import type { SqlRow } from "./sql"
-import { fallbackMilestoneText, type ModelChange, type ModelProvenance, type ModelSetter, type ObserveModelRequest, type ObserveModelResult, type ThreadModel } from "./session-models"
+import { fallbackMilestoneText, type ModelChange, type ModelProvenance, type ModelSetter, type ObserveModelRequest, type ObserveModelResult, type SessionModelRecord, type ThreadModel } from "./session-models"
 import { type StoreContext, transaction, write } from "./store-ops"
 import { expireDue, insertOutbox, selectBindings } from "./store-relay-ops"
 
-const COLUMNS = ["durable_id", "provider", "model_id", "thinking_level", "provenance", "set_by", "reason", "chosen_provider", "chosen_model_id", "chosen_provenance"] as const
+const COLUMNS = ["durable_id", "provider", "model_id", "thinking_level", "provenance", "set_by", "reason", "chosen_provider", "chosen_model_id", "chosen_provenance", "revision"] as const
 
 function nullable(value: unknown): string | null {
   return value === null || value === undefined ? null : String(value)
@@ -26,6 +26,10 @@ function modelFrom(row: SqlRow): ThreadModel {
   }
 }
 
+function recordFrom(row: SqlRow): SessionModelRecord {
+  return { model: modelFrom(row), revision: Number(row.revision) }
+}
+
 function selectModel(ctx: StoreContext, durableId: string): SqlRow | undefined {
   return ctx.sql.one([...COLUMNS], `SELECT ${COLUMNS.join(", ")} FROM session_models WHERE durable_id = ?`, [durableId])
 }
@@ -33,11 +37,12 @@ function selectModel(ctx: StoreContext, durableId: string): SqlRow | undefined {
 function putModel(ctx: StoreContext, durableId: string, model: ThreadModel, now: number): void {
   write(
     ctx,
-    `INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at, revision)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
      ON CONFLICT(durable_id) DO UPDATE SET provider = excluded.provider, model_id = excluded.model_id, thinking_level = excluded.thinking_level,
        provenance = excluded.provenance, set_by = excluded.set_by, reason = excluded.reason, chosen_provider = excluded.chosen_provider,
-       chosen_model_id = excluded.chosen_model_id, chosen_provenance = excluded.chosen_provenance, updated_at = excluded.updated_at`,
+       chosen_model_id = excluded.chosen_model_id, chosen_provenance = excluded.chosen_provenance, updated_at = excluded.updated_at,
+       revision = session_models.revision + 1`,
     [durableId, model.provider, model.id, model.thinking_level, model.provenance, model.set_by, model.reason, model.provider, model.id, model.provenance === "fallback" ? null : model.provenance, now],
   )
 }
@@ -51,32 +56,30 @@ export async function recordSessionModel(ctx: StoreContext, request: { readonly 
   return model
 }
 
-function sameStoredModel(a: ThreadModel | null, b: ThreadModel | null): boolean {
-  if (a === null || b === null) return a === b
-  return a.provider === b.provider && a.id === b.id && a.thinking_level === b.thinking_level && a.provenance === b.provenance && a.set_by === b.set_by && a.reason === b.reason
-}
-
 /**
  * Compare-and-swap for the model command paths (#9429 B2): writes `model` only while the record is
- * still the row the caller read before it touched the engine. The store worker runs every op in one
- * serial queue, so the check and the write are atomic across every SDK/CLI/agent caller sharing the
- * database; a record that moved meanwhile is reported back instead of being overwritten, and the
- * caller refreshes from the engine. The stored state can never go backwards to an earlier state.
+ * still at the revision the caller read before it read the engine (`null`: no record yet). Every write
+ * to the record bumps the revision - this one, the gateway's own record, and the session's observed
+ * switches and levels - so a caller whose engine read-back is older than any write that landed since
+ * its read loses the swap, even when that write put back the values it read (A->B->A). The store
+ * worker runs every op in one serial queue, so the check and the write are atomic across every
+ * SDK/CLI/agent caller sharing the database. `record` is the record after the call: the caller's
+ * write when applied, else the one that beat it, for the caller to refresh from the engine.
  */
-export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly expect: ThreadModel | null; readonly model: ThreadModel }): Promise<{ readonly applied: boolean; readonly current: ThreadModel | null }> {
+export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly expect_revision: number | null; readonly model: ThreadModel }): Promise<{ readonly applied: boolean; readonly record: SessionModelRecord | null }> {
   return await transaction(ctx, "record_session_model_if_current", () => {
     const row = selectModel(ctx, request.durable_id)
-    const current = row === undefined ? null : modelFrom(row)
-    if (!sameStoredModel(current, request.expect)) return { applied: false, current }
+    const record = row === undefined ? null : recordFrom(row)
+    if ((record?.revision ?? null) !== request.expect_revision) return { applied: false, record }
     putModel(ctx, request.durable_id, request.model, request.now)
-    return { applied: true, current }
+    return { applied: true, record: { model: request.model, revision: (record?.revision ?? 0) + 1 } }
   })
 }
 
 /** A new thinking level for a session the gateway has a record of; false when it has none. */
 export async function updateSessionThinking(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly thinking_level: string }): Promise<boolean> {
   return await transaction(ctx, "update_session_thinking", () =>
-    write(ctx, "UPDATE session_models SET thinking_level = ?, updated_at = ? WHERE durable_id = ?", [request.thinking_level, request.now, request.durable_id]) > 0)
+    write(ctx, "UPDATE session_models SET thinking_level = ?, updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [request.thinking_level, request.now, request.durable_id]) > 0)
 }
 
 function observe(ctx: StoreContext, request: ObserveModelRequest, row: SqlRow): void {
@@ -85,21 +88,21 @@ function observe(ctx: StoreContext, request: ObserveModelRequest, row: SqlRow): 
   if (request.source === "fallback") {
     // A second fallback in the same window keeps the model the first one overrode.
     const chosen = row.provenance === "fallback" ? [row.chosen_provider, row.chosen_model_id, row.chosen_provenance] : [row.provider, row.model_id, row.provenance]
-    write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = 'fallback', reason = ?, chosen_provider = ?, chosen_model_id = ?, chosen_provenance = ?, updated_at = ? WHERE durable_id = ?", [
+    write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = 'fallback', reason = ?, chosen_provider = ?, chosen_model_id = ?, chosen_provenance = ?, updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [
       ...to, thinking, request.reason, nullable(chosen[0]), nullable(chosen[1]), nullable(chosen[2]), request.now, request.durable_id,
     ])
     return
   }
   if (request.source === "fallback-revert") {
     if (row.provenance !== "fallback") return
-    write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = COALESCE(chosen_provenance, 'set'), reason = NULL, updated_at = ? WHERE durable_id = ?", [...to, thinking, request.now, request.durable_id])
+    write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = COALESCE(chosen_provenance, 'set'), reason = NULL, updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [...to, thinking, request.now, request.durable_id])
     return
   }
   // `set` or `cycle`: an explicit switch. The gateway writes its own setter after the engine switched,
   // so the switch the session observes for the model the record already names as set keeps that setter.
   const same = row.provider === request.to.provider && row.model_id === request.to.id && row.provenance === "set"
   const setBy = same ? nullable(row.set_by) : "user"
-  write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = 'set', set_by = ?, reason = NULL, chosen_provider = ?, chosen_model_id = ?, chosen_provenance = 'set', updated_at = ? WHERE durable_id = ?", [
+  write(ctx, "UPDATE session_models SET provider = ?, model_id = ?, thinking_level = COALESCE(?, thinking_level), provenance = 'set', set_by = ?, reason = NULL, chosen_provider = ?, chosen_model_id = ?, chosen_provenance = 'set', updated_at = ?, revision = revision + 1 WHERE durable_id = ?", [
     ...to, thinking, setBy, ...to, request.now, request.durable_id,
   ])
 }
@@ -127,6 +130,12 @@ export async function observeModelSelect(ctx: StoreContext, request: ObserveMode
   })
   ctx.emit({ kind: "model_observed", session_durable_id: request.durable_id, source: request.source, updated: result.updated, cursors: result.milestones.map((row) => row.cursor) })
   return result
+}
+
+/** One session's record with its revision, null when it has none; a plain read that takes no write lock. */
+export function sessionModelRecord(ctx: StoreContext, durableId: string): SessionModelRecord | null {
+  const row = selectModel(ctx, durableId)
+  return row === undefined ? null : recordFrom(row)
 }
 
 /** The records of `durableIds` that exist, keyed by durable id; a plain read that takes no write lock. */

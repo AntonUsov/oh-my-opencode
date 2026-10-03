@@ -110,7 +110,12 @@ switch to, with `current` its record: `{kind:"ok", thread_id|null, current: mode
 it from the next turn) with the same matching and refusals, plus `not_resumable` for a thread with
 no live owner. A switch the engine holds (compaction) answers the model it still runs with
 `pending: {provider, id}` naming the requested one, and the CLI prints that pending model on its
-own line. `set-reasoning` checks the level against the active model before anything changes
+own line. A switch another switch replaced before this call read the engine back (another client's
+`set-model`, a `/model` in the session) answers the model the engine runs with `superseded:
+{provider, id}` naming the requested one instead: it will not apply. `--set-by` is recorded only on
+the model this call asked for; a held or superseded switch leaves the running model's own record.
+Concurrent `set-model` and `set-reasoning` calls on one session never leave the record behind the
+engine: each write swaps on the record's revision, which every write bumps. `set-reasoning` checks the level against the active model before anything changes
 (`thinking_level_unsupported` with `details.supported`); `--scope turn` changes only the current
 level, `session` (the default) also the model's remembered one. The reported `level` and the
 recorded `thinking_level` are the level the session runs after the change, as the engine reports it.

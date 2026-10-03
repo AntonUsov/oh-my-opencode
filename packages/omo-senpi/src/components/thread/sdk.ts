@@ -19,8 +19,8 @@ import { addressBook, hostView, resolution, resolveEntries, resolveStoredSession
 import { UNKNOWN_CALLER, type ThreadHost, type ThreadToolSurfaceOptions } from "./tools/ports"
 import type { OmoModelProfile } from "@oh-my-opencode/omo-config-core"
 
-import { createThread, listThreadModels, modelProfileChoice, setThreadModel, setThreadReasoning, type CreateThreadInput, type ModelsResult } from "./model-control"
-import type { ModelRef, ModelSetter, ThreadModel } from "./gateway/session-models"
+import { createThread, listThreadModels, modelProfileChoice, setThreadModel, setThreadReasoning, type CreateThreadInput, type ModelsResult, type SetModelOk } from "./model-control"
+import type { ModelSetter } from "./gateway/session-models"
 import { listThreads, readThread } from "./tools/read-ops"
 
 export type ThreadSdkOptions = {
@@ -73,7 +73,7 @@ export type ThreadSdk = StoreExtensionApi & {
   readonly create: (request: Scoped & CreateThreadInput) => Promise<ThreadToolResult>
   /** With no thread, what a new session could run; with one, what its live session can switch to, and its recorded model. */
   readonly models: (request: Scoped & { readonly thread?: string; readonly provider?: string }) => Promise<ModelsResult | Failure>
-  readonly setModel: (request: Scoped & { readonly thread: string; readonly model: string; readonly provider?: string; readonly set_by?: ModelSetter }) => Promise<{ readonly kind: "ok"; readonly thread_id: string; readonly model: ThreadModel; readonly pending?: ModelRef } | Failure>
+  readonly setModel: (request: Scoped & { readonly thread: string; readonly model: string; readonly provider?: string; readonly set_by?: ModelSetter }) => Promise<SetModelOk | Failure>
   readonly setReasoning: (request: Scoped & { readonly thread: string; readonly level: string; readonly scope?: "session" | "turn" }) => Promise<ThreadToolResult>
   readonly locate: (request: Scoped & { readonly thread: string }) => Promise<{ readonly kind: "ok"; readonly thread: LocatedThread } | Failure>
   /** senpi `release_session` on the host that serves `thread`; a thrown transport failure is answered as `host_unavailable`. */
