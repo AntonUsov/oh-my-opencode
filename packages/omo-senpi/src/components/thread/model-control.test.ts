@@ -454,7 +454,7 @@ function engineFixture() {
    * session: its host drives this engine's switch and answers get_state from it. `beforeStateReply`
    * holds the first get_state after the next set_model until `wait` resolves, after computing the answer.
    */
-  const sharedSdk = () => {
+  const sharedSdk = (sdkStore: GatewayStore = store) => {
     const session: ThreadHostSession = { sessionId: "rpc-e", durableSessionId: durableId, cwd: process.cwd(), name: "lane", status: "open", socket: HOST_SOCKET, endpoint_kind: "rpc_host" }
     let hold: { readonly wait: () => Promise<void>; armed: boolean } | undefined
     const host: ThreadHost = {
@@ -486,11 +486,11 @@ function engineFixture() {
       setThinkingLevel: async () => {},
       getAvailableThinkingLevels: async () => ENGINE_LEVELS[`${engine.model?.provider}/${engine.model?.id}`] ?? ["off"],
     }
-    const sdk = createThreadSdk({ agentDir, cwd: process.cwd(), uid: 501, user: "qa", host, store, modelProfile: () => ({ model_profile: "recommended" }) })
+    const sdk = createThreadSdk({ agentDir, cwd: process.cwd(), uid: 501, user: "qa", host, store: sdkStore, modelProfile: () => ({ model_profile: "recommended" }) })
     disposables.push(sdk)
     return { sdk, beforeStateReply: (wait: () => Promise<void>) => { hold = { wait, armed: false } } }
   }
-  return { engine, admission, userSwitch, runtimeSwitch, providerError, settle, observed, bindMilestones, rows, recorded, record, sharedSdk }
+  return { engine, admission, userSwitch, runtimeSwitch, providerError, settle, observed, bindMilestones, rows, recorded, record, sharedSdk, store }
 }
 
 type GatewayStoreModel = Parameters<GatewayStore["recordSessionModel"]>[0]["model"]
@@ -942,5 +942,31 @@ describe("#9429 the command path and the session's own observer share one store"
     await e.settle()
     await back
     expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "user" })
+  })
+
+  test("#given a set-model --set-by lead the engine holds #when the hold lands right after the call recorded the running model #then the landed switch is still the lead's", async () => {
+    const e = engineFixture()
+    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })
+    e.admission.hold = true
+    // The session's next turn applies the hold between the command's compare-and-swap write and whatever it writes next.
+    let landing: Promise<void> | undefined
+    const store: GatewayStore = {
+      ...e.store,
+      recordSessionModelIfCurrent: async (request) => {
+        const result = await e.store.recordSessionModelIfCurrent(request)
+        landing ??= (async () => {
+          e.admission.hold = false
+          const landed = e.observed()
+          await e.engine._switchActiveModel(GPT_Y_MODEL, { persistDefault: false, appendSessionEntry: true, emitModelSelect: true, modelSelectSource: "set", invalidateCompaction: true, allowDeferral: false })
+          await e.settle()
+          await landed
+        })()
+        await landing
+        return result
+      },
+    }
+    expect(await e.sharedSdk(store).sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "lead" })).toMatchObject({ kind: "ok", pending: GPT_Y })
+    expect(e.engine.model).toMatchObject(GPT_Y)
+    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "lead" })
   })
 })

@@ -11,7 +11,7 @@ import { expireDue, insertOutbox, selectBindings } from "./store-relay-ops"
 
 const COLUMNS = ["durable_id", "provider", "model_id", "thinking_level", "provenance", "set_by", "reason", "chosen_provider", "chosen_model_id", "chosen_provenance", "revision", "pending_provider", "pending_model_id", "pending_set_by"] as const
 
-/** Every model write clears a held set-model's choice: a switch that lands ends the engine's hold. */
+/** A switch that lands clears a set-model's noted choice, as it ends the engine's hold. */
 const CLEAR_PENDING = "pending_provider = NULL, pending_model_id = NULL, pending_set_by = NULL"
 
 function nullable(value: unknown): string | null {
@@ -53,7 +53,7 @@ function putModel(ctx: StoreContext, durableId: string, model: ThreadModel, now:
        chosen_model_id = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_model_id ELSE excluded.chosen_model_id END,
        chosen_provenance = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_provenance ELSE excluded.chosen_provenance END,
        updated_at = excluded.updated_at,
-       revision = session_models.revision + 1, ${CLEAR_PENDING}`,
+       revision = session_models.revision + 1`,
     [durableId, model.provider, model.id, model.thinking_level, model.provenance, model.set_by, model.reason, model.provider, model.id, model.provenance === "fallback" ? null : model.provenance, now],
   )
 }
@@ -88,13 +88,21 @@ export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { 
 }
 
 /**
- * A set-model the engine held: its choice waits on the record until the switch lands, so the session's
- * observer can attribute the landed switch to this setter. It is not the record's model, so the
- * revision does not move. False when the session has no record.
+ * A set-model's choice, noted before it asks the engine: it waits on the record until the switch lands,
+ * so the session's observer attributes the landed switch to this setter, whenever it lands - at once, or
+ * on a later turn after the engine held it, even before the call has written the record. It is not the
+ * record's model, so the revision does not move, and the command's own record write keeps it. False when
+ * the session has no record.
  */
 export async function recordPendingSessionModel(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly provider: string; readonly id: string; readonly set_by: ModelSetter }): Promise<boolean> {
   return await transaction(ctx, "record_pending_session_model", () =>
     write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ? WHERE durable_id = ?", [request.provider, request.id, request.set_by, request.durable_id]) > 0)
+}
+
+/** Drops a set-model's noted choice once its switch will not land later; a later caller's choice is left alone. */
+export async function clearPendingSessionModel(ctx: StoreContext, request: { readonly durable_id: string; readonly provider: string; readonly id: string; readonly set_by: ModelSetter }): Promise<boolean> {
+  return await transaction(ctx, "clear_pending_session_model", () =>
+    write(ctx, `UPDATE session_models SET ${CLEAR_PENDING} WHERE durable_id = ? AND pending_provider = ? AND pending_model_id = ? AND pending_set_by = ?`, [request.durable_id, request.provider, request.id, request.set_by]) > 0)
 }
 
 /** A new thinking level for a session the gateway has a record of; false when it has none. */
