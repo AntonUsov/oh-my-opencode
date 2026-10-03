@@ -1,3 +1,11 @@
+## 2026-10-03 - omo.dev/download serves the desktop installers with OS detection and checksums (#9473)
+
+omo.dev had no page for the desktop app: the landing page offered only the command-line installer. `/download` (all four locales) now reads the stable and beta `manifest.json` files from the download host on the server, so the page needs no CORS and stays crawlable. The browser detects the OS (`navigator.userAgentData`, with the user agent as a fallback) and, where the browser answers, the CPU, then shows one primary button for the visitor's system. Every installer is listed with its size and full SHA-256, and a "Verify your download" section gives the checksum command for macOS, Windows and Linux plus a link to the release's SHA256SUMS. A Mac whose browser hides its CPU gets Apple silicon first and an Intel link beside it; a Linux visitor is never handed an x64 build when only that exists for another CPU.
+
+An installer or release-notes link that is not on the download host (or has no valid SHA-256) is dropped, so the page cannot link GitHub Releases. With no stable manifest published the page shows "Coming" with the launch date instead of an installer; a broken host shows an unavailable state with the command-line install. The Beta switch appears once both channels have a release, and `/download?channel=beta` always works. The hero gains a "Download the desktop app" button, `/desktop` redirects to `/download` (308, locale kept), and `/download` is in the sitemap.
+
+`lib/desktop-download.test.ts` covers installer choice and the manifest boundary. `e2e/download.spec.ts` drives the page against a fixture download host (`e2e/support/download-fixture-server.ts`) for Apple silicon, Intel, Windows, Linux, a hidden-CPU Mac, a phone, a missing Linux build, before launch and a host outage. Both fail on `dev`, where `/download` does not exist.
+
 ## 2026-10-03 - LazyCodex spawns a project's own registered agent roles (lazycodex#171, lazycodex#164)
 
 Reported by @aconley-vultr. On the LazyCodex surface, `spawnRoleDenial()` (`packages/omo-codex/plugin/components/ulw-loop/src/spawn-role-guard.ts`) accepted only the 12 bundled role names, and `applySpawnGuards()` ran it on every spawn before the plan and budget checks. A project's own roles in `.codex/agents/*.toml`, which Codex offers as valid `agent_type` choices, were denied even with no LazyCodex plan active.
@@ -8,6 +16,7 @@ The bundled Hephaestus rule's `multi_agent_v2` `spawn_agent` example (`component
 
 `ulw-loop/test/spawn-role-registered.test.ts` covers project roles from a nested cwd, keying by declared name, a role file without a name field, `CODEX_HOME` roles in both forms, and the denials (no role file, no `agent_type`, a role registered only in another project). Five of its eight cases fail on `dev`. `spawn-role-matrix.test.ts` now isolates `CODEX_HOME`.
 
+||||||| parent of 9097adcda (feat(web): omo.dev/download with OS detection, checksums and verify steps)
 ## 2026-10-03 - OpenCode executes tool-argument rewrites on the original object (#9448)
 
 `replaceToolArgs` replaced `output.args` with a shallow clone, but OpenCode executes tools with the argument object it retained before calling `tool.execute.before`. The patch never reached that object, and later plugins edited a detached copy. The helper now merges patches into mutable arguments in place, so both OmO's rewrites and later hooks' edits reach tool execution. All 12 OpenCode call sites are unchanged.
