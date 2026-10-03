@@ -20,7 +20,7 @@ import type {
   ReportOpResult,
   ToolReceiptBegin,
 } from "./store-relay-ops"
-import type { ModelSetter, ObserveModelRequest, ObserveModelResult, SessionModelRecord, ThreadModel } from "./session-models"
+import type { ObserveModelRequest, ObserveModelResult, PendingChoice, SessionModelRecord, ThreadModel } from "./session-models"
 import type { DeliveryReceipt } from "./store-ops"
 import type { ClearEndpointRequest, RegisterIncarnationRequest, SessionOwner } from "./store-ownership"
 import type {
@@ -125,13 +125,13 @@ export type GatewayStore = StoreExtensionApi & {
   /** #9425: the gateway's own model choice for a session it created or re-modelled. */
   readonly recordSessionModel: (request: { readonly now: number; readonly durable_id: string; readonly model: ThreadModel }) => Promise<ThreadModel>
   /** Compare-and-swap variant (#9429 B2): writes only while the record is still at `expect_revision` (null: no record); `record` is the record after the call. */
-  readonly recordSessionModelIfCurrent: (request: { readonly now: number; readonly durable_id: string; readonly expect_revision: number | null; readonly model: ThreadModel }) => Promise<{ readonly applied: boolean; readonly record: SessionModelRecord | null }>
+  readonly recordSessionModelIfCurrent: (request: { readonly now: number; readonly durable_id: string; readonly expect_revision: number | null; readonly model: ThreadModel; readonly pending?: PendingChoice }) => Promise<{ readonly applied: boolean; readonly record: SessionModelRecord | null }>
   /** A new thinking level for a session with a model record; false when there is none. */
   readonly updateSessionThinking: (request: { readonly now: number; readonly durable_id: string; readonly thinking_level: string }) => Promise<boolean>
-  /** A set-model's choice, noted before it asks the engine and waiting on the record until the switch lands (#9429); false without a record. */
-  readonly recordPendingSessionModel: (request: { readonly now: number; readonly durable_id: string; readonly provider: string; readonly id: string; readonly set_by: ModelSetter }) => Promise<boolean>
-  /** Drops that choice when its switch will not land later, unless a later caller replaced it. */
-  readonly clearPendingSessionModel: (request: { readonly durable_id: string; readonly provider: string; readonly id: string; readonly set_by: ModelSetter }) => Promise<boolean>
+  /** A set-model's choice, noted before it asks the engine and waiting on the record until the switch lands (#9429); `previous` is the choice it replaced. */
+  readonly recordPendingSessionModel: (request: PendingChoice & { readonly now: number; readonly durable_id: string }) => Promise<{ readonly recorded: boolean; readonly previous: PendingChoice | null }>
+  /** Replaces that choice with `next` (null clears it) only while the record still holds `expect`. */
+  readonly replacePendingSessionModel: (request: { readonly durable_id: string; readonly expect: PendingChoice; readonly next: PendingChoice | null }) => Promise<boolean>
   /** The session's own `model_select`: keeps its record true and writes a fallback switch's milestone rows. */
   readonly observeModelSelect: (request: ObserveModelRequest) => Promise<ObserveModelResult>
   /** The model records of these sessions that exist, keyed by durable id; a plain read that takes no write lock. */
@@ -365,7 +365,7 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     recordSessionModelIfCurrent: (request) => call("record_session_model_if_current", request),
     updateSessionThinking: (request) => call("update_session_thinking", request),
     recordPendingSessionModel: (request) => call("record_pending_session_model", request),
-    clearPendingSessionModel: (request) => call("clear_pending_session_model", request),
+    replacePendingSessionModel: (request) => call("replace_pending_session_model", request),
     observeModelSelect: (request) => call("observe_model_select", request),
     sessionModels: (durableIds) => call("session_models", durableIds),
     sessionModelRecord: (durableId) => call("session_model_record", durableId),

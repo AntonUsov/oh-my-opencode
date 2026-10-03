@@ -5,7 +5,7 @@
  * its revert) and writes one `milestone` row per outbound binding for a fallback switch.
  */
 import type { SqlRow } from "./sql"
-import { fallbackMilestoneText, type ModelChange, type ModelProvenance, type ModelSetter, type ObserveModelRequest, type ObserveModelResult, type SessionModelRecord, type ThreadModel } from "./session-models"
+import { fallbackMilestoneText, type ModelChange, type ModelProvenance, type ModelSetter, type ObserveModelRequest, type ObserveModelResult, type PendingChoice, type SessionModelRecord, type ThreadModel } from "./session-models"
 import { type StoreContext, transaction, write } from "./store-ops"
 import { expireDue, insertOutbox, selectBindings } from "./store-relay-ops"
 
@@ -33,6 +33,11 @@ function recordFrom(row: SqlRow): SessionModelRecord {
   return { model: modelFrom(row), revision: Number(row.revision) }
 }
 
+function pendingFrom(row: SqlRow): PendingChoice | null {
+  return row.pending_provider === null || row.pending_model_id === null || row.pending_set_by === null ? null
+    : { provider: String(row.pending_provider), id: String(row.pending_model_id), set_by: row.pending_set_by as ModelSetter }
+}
+
 function selectModel(ctx: StoreContext, durableId: string): SqlRow | undefined {
   return ctx.sql.one([...COLUMNS], `SELECT ${COLUMNS.join(", ")} FROM session_models WHERE durable_id = ?`, [durableId])
 }
@@ -42,11 +47,12 @@ function selectModel(ctx: StoreContext, durableId: string): SqlRow | undefined {
  * command that rewrites a session on its fallback model - a level change, a held or superseded
  * switch - leaves the engine's fallback-revert something true to return to.
  */
-function putModel(ctx: StoreContext, durableId: string, model: ThreadModel, now: number): void {
+function putModel(ctx: StoreContext, durableId: string, model: ThreadModel, now: number, pending: PendingChoice | null = null): void {
+  // A set-model's choice (`pending`) is written only with a record this creates; an existing record keeps its own.
   write(
     ctx,
-    `INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at, revision)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at, revision, pending_provider, pending_model_id, pending_set_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
      ON CONFLICT(durable_id) DO UPDATE SET provider = excluded.provider, model_id = excluded.model_id, thinking_level = excluded.thinking_level,
        provenance = excluded.provenance, set_by = excluded.set_by, reason = excluded.reason,
        chosen_provider = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_provider ELSE excluded.chosen_provider END,
@@ -54,7 +60,7 @@ function putModel(ctx: StoreContext, durableId: string, model: ThreadModel, now:
        chosen_provenance = CASE WHEN excluded.provenance = 'fallback' THEN session_models.chosen_provenance ELSE excluded.chosen_provenance END,
        updated_at = excluded.updated_at,
        revision = session_models.revision + 1`,
-    [durableId, model.provider, model.id, model.thinking_level, model.provenance, model.set_by, model.reason, model.provider, model.id, model.provenance === "fallback" ? null : model.provenance, now],
+    [durableId, model.provider, model.id, model.thinking_level, model.provenance, model.set_by, model.reason, model.provider, model.id, model.provenance === "fallback" ? null : model.provenance, now, pending?.provider ?? null, pending?.id ?? null, pending?.set_by ?? null],
   )
 }
 
@@ -77,12 +83,12 @@ export async function recordSessionModel(ctx: StoreContext, request: { readonly 
  * SDK/CLI/agent caller sharing the database. `record` is the record after the call: the caller's
  * write when applied, else the one that beat it, for the caller to refresh from the engine.
  */
-export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly expect_revision: number | null; readonly model: ThreadModel }): Promise<{ readonly applied: boolean; readonly record: SessionModelRecord | null }> {
+export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly expect_revision: number | null; readonly model: ThreadModel; readonly pending?: PendingChoice }): Promise<{ readonly applied: boolean; readonly record: SessionModelRecord | null }> {
   return await transaction(ctx, "record_session_model_if_current", () => {
     const row = selectModel(ctx, request.durable_id)
     const record = row === undefined ? null : recordFrom(row)
     if ((record?.revision ?? null) !== request.expect_revision) return { applied: false, record }
-    putModel(ctx, request.durable_id, request.model, request.now)
+    putModel(ctx, request.durable_id, request.model, request.now, request.pending ?? null)
     return { applied: true, record: { model: request.model, revision: (record?.revision ?? 0) + 1 } }
   })
 }
@@ -91,18 +97,26 @@ export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { 
  * A set-model's choice, noted before it asks the engine: it waits on the record until the switch lands,
  * so the session's observer attributes the landed switch to this setter, whenever it lands - at once, or
  * on a later turn after the engine held it, even before the call has written the record. It is not the
- * record's model, so the revision does not move, and the command's own record write keeps it. False when
- * the session has no record.
+ * record's model, so the revision does not move, and the command's own record write keeps it. `previous`
+ * is the choice it replaced, for a switch the engine then refuses: the engine's earlier hold still stands.
+ * `recorded` is false when the session has no record.
  */
-export async function recordPendingSessionModel(ctx: StoreContext, request: { readonly now: number; readonly durable_id: string; readonly provider: string; readonly id: string; readonly set_by: ModelSetter }): Promise<boolean> {
-  return await transaction(ctx, "record_pending_session_model", () =>
-    write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ? WHERE durable_id = ?", [request.provider, request.id, request.set_by, request.durable_id]) > 0)
+export async function recordPendingSessionModel(ctx: StoreContext, request: PendingChoice & { readonly now: number; readonly durable_id: string }): Promise<{ readonly recorded: boolean; readonly previous: PendingChoice | null }> {
+  return await transaction(ctx, "record_pending_session_model", () => {
+    const row = selectModel(ctx, request.durable_id)
+    if (row === undefined) return { recorded: false, previous: null }
+    write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ? WHERE durable_id = ?", [request.provider, request.id, request.set_by, request.durable_id])
+    return { recorded: true, previous: pendingFrom(row) }
+  })
 }
 
-/** Drops a set-model's noted choice once its switch will not land later; a later caller's choice is left alone. */
-export async function clearPendingSessionModel(ctx: StoreContext, request: { readonly durable_id: string; readonly provider: string; readonly id: string; readonly set_by: ModelSetter }): Promise<boolean> {
-  return await transaction(ctx, "clear_pending_session_model", () =>
-    write(ctx, `UPDATE session_models SET ${CLEAR_PENDING} WHERE durable_id = ? AND pending_provider = ? AND pending_model_id = ? AND pending_set_by = ?`, [request.durable_id, request.provider, request.id, request.set_by]) > 0)
+/** Replaces a set-model's noted choice with `next` (null clears it) only while the record still holds `expect`: a later caller's choice is left alone. */
+export async function replacePendingSessionModel(ctx: StoreContext, request: { readonly durable_id: string; readonly expect: PendingChoice; readonly next: PendingChoice | null }): Promise<boolean> {
+  const { expect, next } = request
+  return await transaction(ctx, "replace_pending_session_model", () =>
+    write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ? WHERE durable_id = ? AND pending_provider = ? AND pending_model_id = ? AND pending_set_by = ?", [
+      next?.provider ?? null, next?.id ?? null, next?.set_by ?? null, request.durable_id, expect.provider, expect.id, expect.set_by,
+    ]) > 0)
 }
 
 /** A new thinking level for a session the gateway has a record of; false when it has none. */

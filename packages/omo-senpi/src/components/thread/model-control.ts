@@ -3,7 +3,7 @@ import type { OmoModelProfile } from "@oh-my-opencode/omo-config-core"
 import { DEFAULT_MODEL_PROFILE_ID } from "../model-profile/builtin-profiles"
 import { resolveModelProfile } from "../model-profile/resolve"
 import type { ThreadToolResult } from "./contracts"
-import { isModelSetter, MODEL_SETTERS, modelLabel, type ModelRef, type ModelSetter, type ThreadModel } from "./gateway/session-models"
+import { isModelSetter, MODEL_SETTERS, modelLabel, type ModelRef, type ModelSetter, type PendingChoice, type ThreadModel } from "./gateway/session-models"
 import { failure, resolution, resolveEntries, routingId, sessionPort, summary, targetSession } from "./tools/internals"
 import type { ModelCatalogEntry, ThreadHostView, ThreadToolSurfaceOptions } from "./tools/ports"
 
@@ -142,6 +142,7 @@ async function persistEngineState(
   durableId: string,
   readState: () => Promise<unknown>,
   build: (read: EngineRead, current: ThreadModel | null) => ThreadModel | null,
+  pending?: PendingChoice,
 ): Promise<{ readonly row: ThreadModel | null; readonly reads: readonly EngineRead[]; readonly swappedFrom?: number | null }> {
   let record = await options.store.sessionModelRecord(durableId)
   const reads: EngineRead[] = []
@@ -156,7 +157,8 @@ async function persistEngineState(
     if (model === null) return { row: record?.model ?? null, reads, swappedFrom }
     const created = record === null
     const expected = record?.revision ?? null
-    const result = await options.store.recordSessionModelIfCurrent({ now: (options.now ?? options.store.now)(), durable_id: durableId, expect_revision: expected, model })
+    // A record this write creates carries the caller's choice from its first moment, so a landing never finds it without one.
+    const result = await options.store.recordSessionModelIfCurrent({ now: (options.now ?? options.store.now)(), durable_id: durableId, expect_revision: expected, model, ...(created && pending !== undefined ? { pending } : {}) })
     record = result.record
     if (!result.applied) continue
     swappedFrom ??= expected
@@ -244,14 +246,16 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
   const revisionBefore = (await options.store.sessionModelRecord(resolved.entry.thread_id))?.revision ?? null
   // Noted before the engine is asked, so the session's observer attributes the switch to this caller
   // whenever it lands - at once, or on a later turn after the engine held it - even if that is before
-  // this call has written the record.
-  const pending = { now: (options.now ?? options.store.now)(), durable_id: resolved.entry.thread_id, provider: matched.entry.provider, id: matched.entry.id, set_by: setBy }
-  await options.store.recordPendingSessionModel(pending)
+  // this call has written the record. A session with no record gets it with the record this call creates.
+  const choice: PendingChoice = { provider: matched.entry.provider, id: matched.entry.id, set_by: setBy }
+  const durable_id = resolved.entry.thread_id
+  const noted = await options.store.recordPendingSessionModel({ now: (options.now ?? options.store.now)(), durable_id, ...choice })
   let selected: ModelRef
   try {
     selected = await port.setModel(routingId(session), matched.entry.provider, matched.entry.id)
   } catch (error) {
-    await options.store.clearPendingSessionModel(pending)
+    // A refused switch leaves the engine's earlier hold in place, so the choice noted for it comes back.
+    await options.store.replacePendingSessionModel({ durable_id, expect: choice, next: noted.previous })
     throw error
   }
   const requested: ModelRef = { provider: selected.provider, id: selected.id }
@@ -265,12 +269,12 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
     if (sameRef(read.ref, requested)) return { ...read.ref, thinking_level, provenance: "set", set_by: setBy, reason: null }
     if (current !== null && sameRef(current, read.ref)) return { ...current, thinking_level }
     return { ...read.ref, thinking_level, provenance: "set", set_by: "user", reason: null }
-  })
+  }, choice)
   const last = reads.at(-1)
   const model = row ?? { ...(last?.ref ?? before), thinking_level: last?.thinking ?? null, provenance: "set", set_by: "user", reason: null }
   if (last?.ref !== null && last?.ref !== undefined && sameRef(model, requested) && sameRef(last.ref, requested)) {
     // Applied and recorded with this caller's setter, which an observer arriving later keeps.
-    await options.store.clearPendingSessionModel(pending)
+    await options.store.replacePendingSessionModel({ durable_id, expect: choice, next: null })
     return { kind: "ok", thread_id: resolved.entry.thread_id, model }
   }
   // Not applied: the ok result names what runs and the requested model. `pending` is a switch the
@@ -284,10 +288,12 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
   const held = last?.ref === null || last === undefined ? true
     : last.held !== undefined ? last.held !== null && sameRef(last.held, requested)
     : !applied && sameRef(last.ref, before) && (revisionBefore === null || untouched)
-  // The held switch lands on a later turn as a plain switch and keeps the choice noted for it; a session
-  // this call gave its first record had nowhere to note it, so it is noted now. A superseded one will not land.
-  if (!held) await options.store.clearPendingSessionModel(pending)
-  else if (revisionBefore === null) await options.store.recordPendingSessionModel({ ...pending, ...requested })
+  // The held switch lands on a later turn as a plain switch and keeps the choice noted for it; a
+  // superseded one will not land, so its choice goes. A host that reports its hold names the hold this
+  // call's switch left, even when another call for the same model noted its choice in between, so the
+  // choice is noted again; a host that does not cannot tell that apart from a supersede.
+  if (!held) await options.store.replacePendingSessionModel({ durable_id, expect: choice, next: null })
+  else if (last?.held !== undefined && last.held !== null) await options.store.recordPendingSessionModel({ now: (options.now ?? options.store.now)(), durable_id, ...choice })
   return { kind: "ok", thread_id: resolved.entry.thread_id, model, ...(held ? { pending: requested } : { superseded: requested }) }
 }
 

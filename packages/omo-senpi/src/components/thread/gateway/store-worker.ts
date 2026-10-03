@@ -181,7 +181,7 @@ async function dispatch(op: string, args: unknown): Promise<unknown> {
     case "record_session_model_if_current": return await models.recordSessionModelIfCurrent(ctx, args as Parameters<typeof models.recordSessionModelIfCurrent>[1])
     case "update_session_thinking": return await models.updateSessionThinking(ctx, args as Parameters<typeof models.updateSessionThinking>[1])
     case "record_pending_session_model": return await models.recordPendingSessionModel(ctx, args as Parameters<typeof models.recordPendingSessionModel>[1])
-    case "clear_pending_session_model": return await models.clearPendingSessionModel(ctx, args as Parameters<typeof models.clearPendingSessionModel>[1])
+    case "replace_pending_session_model": return await models.replacePendingSessionModel(ctx, args as Parameters<typeof models.replacePendingSessionModel>[1])
     case "observe_model_select": return await models.observeModelSelect(ctx, args as Parameters<typeof models.observeModelSelect>[1])
     case "session_models": return models.sessionModels(ctx, args as readonly string[])
     case "session_model_record": return models.sessionModelRecord(ctx, args as string)
