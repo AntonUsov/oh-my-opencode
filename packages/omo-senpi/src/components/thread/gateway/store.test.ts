@@ -149,15 +149,15 @@ describe("schema migration v3 -> v4", () => {
   })
 })
 
-describe("schema migration v6 -> v7", () => {
-  test("#given a v6 store holding a session model #when the current store opens it #then the record reads revision 0, every write bumps it, and a swap on an older revision fails even when the values came back", async () => {
+describe("schema migration v7 -> v8", () => {
+  test("#given a v7 store holding a session model #when the current store opens it #then the record reads revision 0, every write bumps it, and a swap on an older revision fails even when the values came back", async () => {
     const h = (harness = createGatewayHarness())
     mkdirSync(gatewayRootDirectory(h.agentDir), { recursive: true, mode: 0o700 })
-    const v6 = new Database(gatewayDatabasePath(h.agentDir))
-    for (const step of GATEWAY_MIGRATIONS.slice(0, 6)) for (const statement of step) v6.run(statement)
-    v6.run("PRAGMA user_version = 6")
-    v6.run("INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at) VALUES ('B', 'openai', 'gpt-y', 'high', 'set', 'user', NULL, 'openai', 'gpt-y', 'set', 1)")
-    v6.close()
+    const v7 = new Database(gatewayDatabasePath(h.agentDir))
+    for (const step of GATEWAY_MIGRATIONS.slice(0, 7)) for (const statement of step) v7.run(statement)
+    v7.run("PRAGMA user_version = 7")
+    v7.run("INSERT INTO session_models (durable_id, provider, model_id, thinking_level, provenance, set_by, reason, chosen_provider, chosen_model_id, chosen_provenance, updated_at) VALUES ('B', 'openai', 'gpt-y', 'high', 'set', 'user', NULL, 'openai', 'gpt-y', 'set', 1)")
+    v7.close()
     const store = h.store()
     const y = { provider: "openai", id: "gpt-y", thinking_level: "high", provenance: "set", set_by: "user", reason: null } as const
     const x = { ...y, id: "gpt-x" }
