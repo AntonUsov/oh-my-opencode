@@ -99,12 +99,13 @@ export async function recordSessionModelIfCurrent(ctx: StoreContext, request: { 
  * on a later turn after the engine held it, even before the call has written the record. It is not the
  * record's model, so the revision does not move, and the command's own record write keeps it. `previous`
  * is the choice it replaced, for a switch the engine then refuses: the engine's earlier hold still stands.
- * `recorded` is false when the session has no record.
+ * `recorded` is false when the session has no record, or (with `expect_revision`) when the record moved past it.
  */
-export async function recordPendingSessionModel(ctx: StoreContext, request: PendingChoice & { readonly now: number; readonly durable_id: string }): Promise<{ readonly recorded: boolean; readonly previous: PendingChoice | null }> {
+export async function recordPendingSessionModel(ctx: StoreContext, request: PendingChoice & { readonly now: number; readonly durable_id: string; readonly expect_revision?: number }): Promise<{ readonly recorded: boolean; readonly previous: PendingChoice | null }> {
   return await transaction(ctx, "record_pending_session_model", () => {
     const row = selectModel(ctx, request.durable_id)
     if (row === undefined) return { recorded: false, previous: null }
+    if (request.expect_revision !== undefined && Number(row.revision) !== request.expect_revision) return { recorded: false, previous: pendingFrom(row) }
     write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ? WHERE durable_id = ?", [request.provider, request.id, request.set_by, request.durable_id])
     return { recorded: true, previous: pendingFrom(row) }
   })

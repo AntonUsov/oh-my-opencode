@@ -143,7 +143,7 @@ async function persistEngineState(
   readState: () => Promise<unknown>,
   build: (read: EngineRead, current: ThreadModel | null) => ThreadModel | null,
   pending?: PendingChoice,
-): Promise<{ readonly row: ThreadModel | null; readonly reads: readonly EngineRead[]; readonly swappedFrom?: number | null }> {
+): Promise<{ readonly row: ThreadModel | null; readonly reads: readonly EngineRead[]; readonly swappedFrom?: number | null; readonly written?: number }> {
   let record = await options.store.sessionModelRecord(durableId)
   const reads: EngineRead[] = []
   let confirming = false
@@ -166,7 +166,8 @@ async function persistEngineState(
     // write: the session's own observer records nothing for it. Once this call created the record,
     // every later change is written by someone, so one more read-back - answered after the record
     // existed - is enough to catch a change this call's first read missed.
-    if (!created || confirming) return { row: model, reads, swappedFrom }
+    // `written`: the revision this call's last write left, which a later write by anyone moves on.
+    if (!created || confirming) return { row: model, reads, swappedFrom, ...(result.record === null ? {} : { written: result.record.revision }) }
     confirming = true
   }
   return { row: record?.model ?? null, reads, swappedFrom }
@@ -259,7 +260,7 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
     throw error
   }
   const requested: ModelRef = { provider: selected.provider, id: selected.id }
-  const { row, reads, swappedFrom } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (read, current) => {
+  const { row, reads, swappedFrom, written } = await persistEngineState(options, resolved.entry.thread_id, () => port.getState(routingId(session)), (read, current) => {
     // A read-back that names no model cannot confirm anything: the record is left as it is.
     if (read.ref === null) return null
     const thinking_level = read.thinking ?? current?.thinking_level ?? null
@@ -291,9 +292,11 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
   // The held switch lands on a later turn as a plain switch and keeps the choice noted for it; a
   // superseded one will not land, so its choice goes. A host that reports its hold names the hold this
   // call's switch left, even when another call for the same model noted its choice in between, so the
-  // choice is noted again; a host that does not cannot tell that apart from a supersede.
+  // choice is noted again - only while nothing has written the record since this call's own write: a
+  // later call's hold, or a switch that landed and ended the hold, moves the revision past it. A host
+  // that does not report its hold cannot tell this apart from a supersede.
   if (!held) await options.store.replacePendingSessionModel({ durable_id, expect: choice, next: null })
-  else if (last?.held !== undefined && last.held !== null) await options.store.recordPendingSessionModel({ now: (options.now ?? options.store.now)(), durable_id, ...choice })
+  else if (last?.held !== undefined && last.held !== null && written !== undefined) await options.store.recordPendingSessionModel({ now: (options.now ?? options.store.now)(), durable_id, ...choice, expect_revision: written })
   return { kind: "ok", thread_id: resolved.entry.thread_id, model, ...(held ? { pending: requested } : { superseded: requested }) }
 }
 
