@@ -111,7 +111,17 @@ function stateModel(state: unknown): ModelRef | null {
   return typeof provider === "string" && typeof id === "string" ? { provider, id } : null
 }
 
-type EngineRead = { readonly ref: ModelRef | null; readonly thinking: string | null }
+/**
+ * The switch the engine holds for compaction, when the host reports holds (`get_state`'s
+ * `pendingModelSwitch`: `{provider, id}`, or null when none is held). Undefined when the host's state
+ * has no such key: an older engine, which cannot tell a held switch from a superseded one.
+ */
+function stateHeld(state: unknown): ModelRef | null | undefined {
+  if (state === null || typeof state !== "object" || !("pendingModelSwitch" in state)) return undefined
+  return stateModel({ model: (state as { readonly pendingModelSwitch?: unknown }).pendingModelSwitch })
+}
+
+type EngineRead = { readonly ref: ModelRef | null; readonly thinking: string | null; readonly held?: ModelRef | null }
 
 function sameRef(a: ModelRef, b: ModelRef): boolean {
   return a.provider === b.provider && a.id === b.id
@@ -137,7 +147,8 @@ async function persistEngineState(
   const reads: EngineRead[] = []
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const state = await readState()
-    const read: EngineRead = { ref: stateModel(state), thinking: stateThinking(state) }
+    const held = stateHeld(state)
+    const read: EngineRead = { ref: stateModel(state), thinking: stateThinking(state), ...(held === undefined ? {} : { held }) }
     reads.push(read)
     const model: ThreadModel | null = build(read, record?.model ?? null)
     if (model === null) return { row: record?.model ?? null, reads }
@@ -232,11 +243,14 @@ export async function setThreadModel(options: ThreadToolSurfaceOptions, current:
   const model = row ?? { ...requested, thinking_level: null, provenance: "set", set_by: setBy, reason: null }
   if (sameRef(model, requested)) return { kind: "ok", thread_id: resolved.entry.thread_id, model }
   // Not applied: the ok result names what runs and the requested model. `pending` is a switch the
-  // engine holds (the read-back is still the model from before it) and applies from a later turn;
-  // `superseded` is one another switch replaced - it applied and was switched away from, or the engine
-  // now runs a third model - and it will not apply.
+  // engine holds and applies from a later turn; `superseded` is one another switch replaced, which will
+  // not apply. A host that reports its held switch answers that directly. Without it, a read-back still
+  // naming the model from before the switch counts as held, and any other model (or a read that already
+  // showed the requested one) as superseded; a switch replaced by a switch straight back to the model
+  // from before it reads as held there, because get_state alone cannot tell the two apart.
+  const last = reads.at(-1)
   const applied = reads.some((read) => read.ref !== null && sameRef(read.ref, requested))
-  const held = !applied && (before === null || sameRef(model, before))
+  const held = last?.held !== undefined ? last.held !== null && sameRef(last.held, requested) : !applied && (before === null || sameRef(model, before))
   return { kind: "ok", thread_id: resolved.entry.thread_id, model, ...(held ? { pending: requested } : { superseded: requested }) }
 }
 

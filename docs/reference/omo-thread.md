@@ -112,7 +112,9 @@ no live owner. A switch the engine holds (compaction) answers the model it still
 `pending: {provider, id}` naming the requested one, and the CLI prints that pending model on its
 own line. A switch another switch replaced before this call read the engine back (another client's
 `set-model`, a `/model` in the session) answers the model the engine runs with `superseded:
-{provider, id}` naming the requested one instead: it will not apply. `--set-by` is recorded only on
+{provider, id}` naming the requested one instead: it will not apply. An engine whose `get_state`
+reports its held switch (`pendingModelSwitch`) decides between the two; on an engine that does not,
+a switch replaced by a switch straight back to the model from before it reads as `pending`. `--set-by` is recorded only on
 the model this call asked for; a held or superseded switch leaves the running model's own record.
 Concurrent `set-model` and `set-reasoning` calls on one session never leave the record behind the
 engine: each write swaps on the record's revision, which every write bumps. `set-reasoning` checks the level against the active model before anything changes

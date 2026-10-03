@@ -750,6 +750,39 @@ describe("#9425 a held or out-of-order set-model never lies about what the engin
   })
 })
 
+describe("#9429 a host that reports its held switch", () => {
+  /** get_state as an engine that reports holds answers it: `pendingModelSwitch` names the held switch, or null. */
+  function reportingHolds(f: ReturnType<typeof sdkFixture>, held: () => { readonly provider: string; readonly id: string } | null) {
+    const originalGetState = f.host.getState
+    Object.assign(f.host, { getState: async (sessionId: string) => ({ ...((await originalGetState(sessionId)) as object), model: f.models.get(sessionId), pendingModelSwitch: held() }) })
+  }
+
+  test("#given a switch replaced by a switch straight back to the model from before it #when the host reports no held switch #then the earlier call answers superseded, not pending", async () => {
+    const f = sdkFixture()
+    reportingHolds(f, () => null)
+    const gate = holdFirstReadBack(f, "at-reply")
+    const first = f.sdk.setModel({ thread: "lane", model: "gpt-x", set_by: "config" })
+    await gate.entered
+    expect(await f.sdk.setModel({ thread: "lane", model: "claude-opus-5-5", set_by: "lead" })).toMatchObject({ kind: "ok", model: { ...CLAUDE, set_by: "lead" } })
+    gate.release()
+    const earlier = await first
+    expect(earlier).toMatchObject({ kind: "ok", model: { ...CLAUDE, set_by: "lead" }, superseded: { provider: "openai", id: "gpt-x" } })
+    expect("pending" in earlier).toBe(false)
+  })
+
+  test("#given a switch the host reports as held #when set-model returns #then it answers pending and the record keeps the running model", async () => {
+    const f = sdkFixture()
+    await f.store.recordSessionModel({ now: Date.now(), durable_id: "dur-lane", model: { ...CLAUDE, thinking_level: "medium", provenance: "set", set_by: "config", reason: null } })
+    let held: { provider: string; id: string } | null = null
+    reportingHolds(f, () => held)
+    Object.assign(f.host, { setModel: async (_sessionId: string, provider: string, id: string) => { held = { provider, id }; return { provider, id } } })
+    const result = await f.sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "lead" })
+    expect(result).toMatchObject({ kind: "ok", model: { ...CLAUDE, set_by: "config" }, pending: GPT_Y })
+    expect("superseded" in result).toBe(false)
+    expect((await f.store.sessionModels(["dur-lane"]))["dur-lane"]).toMatchObject({ ...CLAUDE, provenance: "set", set_by: "config" })
+  })
+})
+
 describe("#9429 the command path and the session's own observer share one store", () => {
   test("#given a live session whose observer records the switch before the command reads the engine back #when set-model runs with --set-by config #then the record and the result say config", async () => {
     const e = engineFixture()
