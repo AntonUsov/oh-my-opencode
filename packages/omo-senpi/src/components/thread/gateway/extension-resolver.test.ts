@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 
 import { createExtensionResolver } from "./extension-resolver"
 
 // The engine CLI the live surface enumerates endpoints through; it records each call and lists none.
+// One JS engine serves both platforms: POSIX runs SENPI_BIN directly (a shim that execs it), and
+// Windows reads a non-.exe SENPI_BIN as an npm shim and runs the adjacent dist/cli.js.
 let engineLog = ""
 const dirs: string[] = []
 const previousBin = process.env.SENPI_BIN
@@ -13,8 +15,11 @@ beforeEach(() => {
   const bin = mkdtempSync(join(tmpdir(), "ext-resolver-engine-"))
   dirs.push(bin)
   engineLog = join(bin, "calls.log")
+  const cli = join(bin, "node_modules", "@code-yeongyu", "senpi", "dist", "cli.js")
+  mkdirSync(dirname(cli), { recursive: true })
+  writeFileSync(cli, `require("node:fs").appendFileSync(${JSON.stringify(engineLog)}, process.argv.slice(2).join(" ") + "\\n")\nprocess.stdout.write('{"endpoints":[]}\\n')\n`)
   const engine = join(bin, "senpi")
-  writeFileSync(engine, `#!/bin/sh\necho "$*" >> "${engineLog}"\necho '{"endpoints":[]}'\n`)
+  writeFileSync(engine, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(cli)} "$@"\n`)
   chmodSync(engine, 0o755)
   process.env.SENPI_BIN = engine
 })
