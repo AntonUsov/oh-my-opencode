@@ -190,6 +190,7 @@ async function dispatch(op: string, args: unknown): Promise<unknown> {
     case "observe_model_select": return await models.observeModelSelect(ctx, args as Parameters<typeof models.observeModelSelect>[1])
     case "session_models": return models.sessionModels(ctx, args as readonly string[])
     case "session_model_record": return models.sessionModelRecord(ctx, args as string)
+    case "close_question": return await relay.closeQuestion(ctx, args as Parameters<typeof relay.closeQuestion>[1])
     default: throw new Error(`unknown gateway store op: ${op}`)
   }
 }

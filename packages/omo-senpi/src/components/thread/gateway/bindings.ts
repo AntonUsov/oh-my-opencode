@@ -117,6 +117,12 @@ export type OutboxRow = {
   readonly answered_by: ExternalAuthor | null
   /** Only on the `milestone` row a runtime fallback switch wrote (#9425): the switch and the provider error. */
   readonly model_change?: ModelChange
+  /**
+   * For an answered `question`: `in_flight` while a `thread_answer` claim is still being handed to the session (it goes back to
+   * `pending` if that fails), `delivered` once the session took it or closed the question itself. Only `delivered` is settled; a
+   * connector holding the binding's later rows behind the question waits for it. Null for an unanswered question or another event.
+   */
+  readonly answer_state: "in_flight" | "delivered" | null
 }
 
 export function rfc3339(ms: number): string {

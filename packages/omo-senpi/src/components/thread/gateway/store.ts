@@ -227,6 +227,7 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     observeModelSelect: (request) => call("observe_model_select", request),
     sessionModels: (durableIds) => call("session_models", durableIds),
     sessionModelRecord: (durableId) => call("session_model_record", durableId),
+    closeQuestion: (request) => call("close_question", request),
     onEvent: (listener) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
