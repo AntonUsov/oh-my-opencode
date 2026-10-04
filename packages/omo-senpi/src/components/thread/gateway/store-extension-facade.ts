@@ -23,6 +23,8 @@ type FacadeDeps = {
   readonly call: <T>(op: string, args?: unknown) => Promise<T>
   /** The registrations the current worker holds, restored on the next worker after one exits. */
   readonly registrations: Map<string, StoreExtensionRegistration>
+  /** Test seam: an await armed its watch and read a non-final status (`awaitSessionRequest` `onArmed`). */
+  readonly onAwaitArmed?: (awaitRequestId: string) => void
 }
 
 /** A newer core schema refuses extension requests as data; anything else stays an error. */
@@ -99,6 +101,7 @@ export function createExtensionFacade(deps: FacadeDeps): ExtensionFacade {
         timeoutMs: reply.await.timeout_ms,
         status: phase("status"),
         expire: phase("expire"),
+        ...(deps.onAwaitArmed === undefined ? {} : { onArmed: () => deps.onAwaitArmed?.(id) }),
       })) as StoreExtensionResult<T>
     },
     recordThreadCreation: (record) => call("record_thread_creation", { ...record, now: now() }),

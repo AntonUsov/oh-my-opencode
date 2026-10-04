@@ -24,7 +24,7 @@ export type GatewayStoreOptions = {
   /** Resolves extension enqueue targets through the caller's live-and-disk address book. */
   readonly resolveTarget?: GatewayResolve
   /** Test seams only: a shorter busy timeout and lock-wait bound, commit-boundary hooks, and the module location the worker is resolved from. */
-  readonly _test?: GatewayStoreTestHooks & { readonly busyTimeoutMs?: number; readonly lockWaitMaxMs?: number; readonly moduleUrl?: string | URL; readonly onWorkerStarted?: (worker: Worker) => void }
+  readonly _test?: GatewayStoreTestHooks & { readonly busyTimeoutMs?: number; readonly lockWaitMaxMs?: number; readonly moduleUrl?: string | URL; readonly onWorkerStarted?: (worker: Worker) => void; readonly onAwaitArmed?: (awaitRequestId: string) => void }
 }
 
 /** The store worker's file name beside the built extension bundle (`plugin/extensions/`). */
@@ -178,7 +178,7 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     return (await post(op, args)) as T
   }
 
-  const extensions = createExtensionFacade({ agentDir: options.agentDir, now, call, registrations })
+  const extensions = createExtensionFacade({ agentDir: options.agentDir, now, call, registrations, ...(options._test?.onAwaitArmed === undefined ? {} : { onAwaitArmed: options._test.onAwaitArmed }) })
 
   return {
     ...extensions,

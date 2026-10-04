@@ -222,18 +222,25 @@ test("#given the connector completes before the wait is armed #when the tool awa
   expect(result).toMatchObject({ kind: "ok", value: { status: "opened" } })
 })
 
-test("#given the connector completes while the tool waits #when its wake file is touched #then the tool returns opened", async () => {
+test("#given a waiter that read pending and armed its watch #when a SEPARATE store completes the open and touches the wake file #then the watch wakes the waiter, which returns opened long before its 120 s timeout", async () => {
   const h = (harness = createGatewayHarness())
-  const store = h.store()
+  const armedIds: string[] = []
+  let armed: () => void = () => undefined
+  const waiterArmed = new Promise<void>((resolve) => { armed = resolve })
+  // The hook fires only after the first status read answered pending, so the completion below lands after it.
+  const store = h.store({ _test: { onAwaitArmed: (id) => { armedIds.push(id); armed() } } })
   await store.registerStoreExtension(registration({ sessionCallable: [{ ...openOp, await: { ...openOp.await!, timeoutMs: 120_000 } }] }))
   const id = "tor_" + "2".repeat(32)
   const wake = join(dirname(gatewayDatabasePath(h.agentDir)), "thread-open", id)
   mkdirSync(dirname(wake), { recursive: true })
   const waiting = store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child", await: true, await_request_id: id }, { callerDurableId: "caller" })
-  await store.extensionCall("gw", "completeThreadOpen", { await_request_id: id })
+  await waiterArmed
+  const connector = h.store()
+  expect(await connector.extensionCall("gw", "completeThreadOpen", { await_request_id: id })).toMatchObject({ kind: "ok" })
   writeFileSync(wake, "")
   expect(await waiting).toMatchObject({ kind: "ok", value: { status: "opened" } })
-})
+  expect(armedIds).toEqual([id])
+}, 15_000)
 
 test("#given a running connector (wake dir present) but no wake ever arrives #when timeoutMs passes #then expireOp runs and the final status is returned", async () => {
   const h = (harness = createGatewayHarness())

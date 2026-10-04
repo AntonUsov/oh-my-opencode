@@ -9,6 +9,8 @@ export type SessionAwait = {
   readonly timeoutMs: number
   readonly status: () => Promise<StoreExtensionResult<unknown>>
   readonly expire: () => Promise<StoreExtensionResult<unknown>>
+  /** Test seam (the store's `_test.onAwaitArmed`): called once, when the watch is armed and a status read answered not final, just before the first wait. */
+  readonly onArmed?: () => void
 }
 
 /** Only a status the op itself reports as not `pending` is final; a refused status call never is. */
@@ -71,6 +73,7 @@ export async function awaitSessionRequest(request: SessionAwait): Promise<StoreE
     }
   }
   const deadline = Date.now() + request.timeoutMs
+  let announced = false
   try {
     for (;;) {
       woken = false
@@ -79,7 +82,15 @@ export async function awaitSessionRequest(request: SessionAwait): Promise<StoreE
       const remaining = deadline - Date.now()
       if (remaining <= 0) break
       if (woken) continue
+      if (!announced) {
+        announced = true
+        request.onArmed?.()
+      }
       const arrived = await new Promise<boolean>((resolve) => {
+        if (woken) {
+          resolve(true)
+          return
+        }
         const timer = setTimeout(() => resolve(false), remaining)
         wake = () => {
           clearTimeout(timer)
