@@ -9,7 +9,7 @@ import { extname } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import type { StoreContext } from "./store-ops"
-import type { DeclaredSessionOp, SessionCallableOp, StoreExtensionRegistration } from "./store-extensions"
+import type { DeclaredSessionOp, SessionCallableOp, StoreExtensionRegistration, ToolSessionOp } from "./store-extensions"
 
 export const RESERVED_CALLER_KEYS = ["caller_session_durable_id", "caller_created_target"] as const
 export const AWAIT_REQUEST_ID = /^tor_[a-f0-9]{32}$/
@@ -37,27 +37,48 @@ export function registeredToolName(extension: string, toolName: string): string 
   return `ext_${extension}_${toolName}`
 }
 
+export function isToolSessionOp(entry: SessionCallableOp): entry is ToolSessionOp {
+  return entry.internal !== true
+}
+
+/** An internal op gets no tool: no name to compose, and no await or wake a tool would run. */
+function internalEntryProblem(entry: Readonly<Record<string, unknown>>, op: string): string | undefined {
+  if (entry.internal !== true) return `${op}: internal must be true when present`
+  for (const field of ["toolName", "await", "wake"] as const) {
+    if (entry[field] !== undefined) return `${op}: an internal op registers no tool, so it cannot declare ${field}`
+  }
+  if (entry.description !== undefined && !nonEmpty(entry.description)) return `${op}: description must be a non-empty string when present`
+  return undefined
+}
+
 function entryProblem(entry: unknown, extension: string, wakeDir: string | undefined): string | undefined {
   if (!isRecord(entry)) return "a sessionCallable entry must be an object"
   const { op, toolName, description, parameters, targetArg, wake } = entry
   const awaited = entry.await
   if (!nonEmpty(op)) return "op must be a non-empty string"
-  if (typeof toolName !== "string" || !TOOL_NAME.test(toolName)) return `toolName ${String(toolName)} must match ${TOOL_NAME.source}`
-  if (registeredToolName(extension, toolName).length > REGISTERED_TOOL_NAME_MAX) return `${registeredToolName(extension, toolName)} is longer than ${REGISTERED_TOOL_NAME_MAX} characters`
-  if (!nonEmpty(description)) return `${toolName}: description must be a non-empty string`
-  if (!isRecord(parameters) || parameters.type !== "object" || parameters.additionalProperties !== false) return `${toolName}: parameters must be an object schema with additionalProperties: false`
-  const properties = parameters.properties ?? {}
-  if (!isRecord(properties)) return `${toolName}: parameters.properties must be an object`
-  if (RESERVED_CALLER_KEYS.some((key) => Object.hasOwn(properties, key))) return `${toolName}: parameters must not declare ${RESERVED_CALLER_KEYS.join(" or ")}; the store stamps them`
-  if (targetArg !== undefined && (typeof targetArg !== "string" || !Object.hasOwn(properties, targetArg))) return `${toolName}: targetArg ${String(targetArg)} must name a field of parameters.properties`
-  if (awaited !== undefined) {
-    if (!isRecord(awaited) || !nonEmpty(awaited.statusOp) || !nonEmpty(awaited.expireOp)) return `${toolName}: await needs statusOp and expireOp`
-    const timeout = awaited.timeoutMs
-    if (typeof timeout !== "number" || !Number.isInteger(timeout) || timeout < 1 || timeout > AWAIT_TIMEOUT_MAX_MS) return `${toolName}: await.timeoutMs must be an integer from 1 to ${AWAIT_TIMEOUT_MAX_MS}`
-    if (wakeDir === undefined) return `${toolName}: await needs the registration's wakeDir`
+  const internal = entry.internal !== undefined
+  if (internal) {
+    const problem = internalEntryProblem(entry, op)
+    if (problem !== undefined) return problem
+  } else {
+    if (typeof toolName !== "string" || !TOOL_NAME.test(toolName)) return `toolName ${String(toolName)} must match ${TOOL_NAME.source}`
+    if (registeredToolName(extension, toolName).length > REGISTERED_TOOL_NAME_MAX) return `${registeredToolName(extension, toolName)} is longer than ${REGISTERED_TOOL_NAME_MAX} characters`
+    if (!nonEmpty(description)) return `${toolName}: description must be a non-empty string`
   }
-  if (wake !== undefined && (typeof wake !== "string" || !WAKE_FILE.test(wake))) return `${toolName}: wake must be a plain file name matching ${WAKE_FILE.source}`
-  if (wake !== undefined && wakeDir === undefined) return `${toolName}: wake needs the registration's wakeDir`
+  const label = internal ? op : String(toolName)
+  if (!isRecord(parameters) || parameters.type !== "object" || parameters.additionalProperties !== false) return `${label}: parameters must be an object schema with additionalProperties: false`
+  const properties = parameters.properties ?? {}
+  if (!isRecord(properties)) return `${label}: parameters.properties must be an object`
+  if (RESERVED_CALLER_KEYS.some((key) => Object.hasOwn(properties, key))) return `${label}: parameters must not declare ${RESERVED_CALLER_KEYS.join(" or ")}; the store stamps them`
+  if (targetArg !== undefined && (typeof targetArg !== "string" || !Object.hasOwn(properties, targetArg))) return `${label}: targetArg ${String(targetArg)} must name a field of parameters.properties`
+  if (awaited !== undefined) {
+    if (!isRecord(awaited) || !nonEmpty(awaited.statusOp) || !nonEmpty(awaited.expireOp)) return `${label}: await needs statusOp and expireOp`
+    const timeout = awaited.timeoutMs
+    if (typeof timeout !== "number" || !Number.isInteger(timeout) || timeout < 1 || timeout > AWAIT_TIMEOUT_MAX_MS) return `${label}: await.timeoutMs must be an integer from 1 to ${AWAIT_TIMEOUT_MAX_MS}`
+    if (wakeDir === undefined) return `${label}: await needs the registration's wakeDir`
+  }
+  if (wake !== undefined && (typeof wake !== "string" || !WAKE_FILE.test(wake))) return `${label}: wake must be a plain file name matching ${WAKE_FILE.source}`
+  if (wake !== undefined && wakeDir === undefined) return `${label}: wake needs the registration's wakeDir`
   return undefined
 }
 
@@ -74,13 +95,16 @@ export function declarationProblem(descriptor: Pick<StoreExtensionRegistration, 
     const problem = entryProblem(entry, name, wakeDir)
     if (problem !== undefined) return problem
     const op = entry as SessionCallableOp
-    if (names.has(op.toolName)) return `toolName ${op.toolName} is declared twice`
-    names.add(op.toolName)
+    if (isToolSessionOp(op)) {
+      if (names.has(op.toolName)) return `toolName ${op.toolName} is declared twice`
+      names.add(op.toolName)
+    }
     if (ops.has(op.op)) return `op ${op.op} is declared twice`
     ops.add(op.op)
     if (exports === undefined) continue
-    for (const exported of [op.op, ...(op.await === undefined ? [] : [op.await.statusOp, op.await.expireOp])]) {
-      if (!Object.hasOwn(exports, exported) || typeof exports[exported] !== "function") return `${op.toolName}: the module exports no operation ${exported}`
+    const awaited = isToolSessionOp(op) ? op.await : undefined
+    for (const exported of [op.op, ...(awaited === undefined ? [] : [awaited.statusOp, awaited.expireOp])]) {
+      if (!Object.hasOwn(exports, exported) || typeof exports[exported] !== "function") return `${isToolSessionOp(op) ? op.toolName : op.op}: the module exports no operation ${exported}`
     }
   }
   return undefined
@@ -91,7 +115,7 @@ export function declaredOpNames(descriptor: Pick<StoreExtensionRegistration, "se
   const names = new Set<string>()
   for (const entry of descriptor?.sessionCallable ?? []) {
     names.add(entry.op)
-    if (entry.await !== undefined) for (const name of [entry.await.statusOp, entry.await.expireOp]) names.add(name)
+    if (isToolSessionOp(entry) && entry.await !== undefined) for (const name of [entry.await.statusOp, entry.await.expireOp]) names.add(name)
   }
   return names
 }
@@ -113,18 +137,18 @@ export function readDescriptor(ctx: StoreContext, name: string): PersistedDescri
   return row === undefined ? undefined : parse(name, row.descriptor_json)
 }
 
-/** Every declared session op with its registered tool name, in extension-name order; one read, no import. */
+/** Every declared tool op with its registered tool name, in extension-name order; one read, no import. Internal ops get no tool and are not listed. */
 export function listSessionOps(ctx: StoreContext): DeclaredSessionOp[] {
   const rows = ctx.sql.all(["name", "descriptor_json"], "SELECT name, descriptor_json FROM extension_registrations", [], "name")
   return rows.flatMap((row) => {
     const extension = String(row.name)
-    return (parse(extension, row.descriptor_json)?.sessionCallable ?? []).map((entry) => ({ ...entry, extension, registeredName: registeredToolName(extension, entry.toolName) }))
+    return (parse(extension, row.descriptor_json)?.sessionCallable ?? []).filter(isToolSessionOp).map((entry) => ({ ...entry, extension, registeredName: registeredToolName(extension, entry.toolName) }))
   })
 }
 
 /** Why the registration's tools cannot take their names: another extension already composes one of them. */
 export function toolNameTaken(ctx: StoreContext, descriptor: Pick<StoreExtensionRegistration, "name" | "sessionCallable">): string | undefined {
-  const mine = new Set((descriptor.sessionCallable ?? []).map((entry) => registeredToolName(descriptor.name, entry.toolName)))
+  const mine = new Set((descriptor.sessionCallable ?? []).filter(isToolSessionOp).map((entry) => registeredToolName(descriptor.name, entry.toolName)))
   const taken = listSessionOps(ctx).find((entry) => entry.extension !== descriptor.name && mine.has(entry.registeredName))
   return taken === undefined ? undefined : `tool ${taken.registeredName} is already declared by extension ${taken.extension}`
 }

@@ -54,6 +54,21 @@ test.each<[string, Partial<SessionCallableOp>]>([
   expect(await store.sessionCallableOps()).toEqual([])
 })
 
+// Contract: an internal op registers no tool, so it can never carry the tool-only fields a tool would act on.
+test.each<[string, Readonly<Record<string, unknown>>]>([
+  ["a toolName", { toolName: "status" }],
+  ["an await", { await: { statusOp: "threadOpenStatus", expireOp: "expireThreadOpen", timeoutMs: 2_000 } }],
+  ["a wake", { wake: "requests.marker" }],
+  ["internal set to false", { internal: false }],
+])("#given an internal declaration with %s #when registering #then it is refused and nothing is persisted", async (_label, extra) => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  const internal: SessionCallableOp = { op: "workItemStatus", internal: true, parameters: statusOp.parameters }
+  expect(await store.registerStoreExtension(registration({ sessionCallable: [{ ...internal, ...extra } as unknown as SessionCallableOp] }))).toMatchObject({ kind: "refused" })
+  expect(await store.extensionCall("gw", "workItemStatus", { status: "working" })).toMatchObject({ kind: "refused", code: "extension_unknown_name" })
+  expect(await store.registerStoreExtension(registration({ sessionCallable: [internal] }))).toMatchObject({ kind: "ok" })
+})
+
 test("#given declared parameters whose schema only fails when a value reaches it (an invalid pattern) #when a session call carries that field #then it is refused invalid_arguments, never a thrown tool error", async () => {
   const h = (harness = createGatewayHarness())
   const store = h.store()

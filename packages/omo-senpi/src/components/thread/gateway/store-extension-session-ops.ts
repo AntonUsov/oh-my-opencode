@@ -10,7 +10,7 @@ import { rmSync, renameSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { Value } from "typebox/value"
 
-import { AWAIT_REQUEST_ID, RESERVED_CALLER_KEYS } from "./extension-registrations"
+import { AWAIT_REQUEST_ID, RESERVED_CALLER_KEYS, isToolSessionOp } from "./extension-registrations"
 import { gatewayDatabasePath } from "./paths"
 import type { StoreExtensions } from "./store-extension-ops"
 import { transaction, type StoreContext } from "./store-ops"
@@ -73,6 +73,7 @@ export async function sessionCall(ctx: StoreContext, extensions: StoreExtensions
   const forged = RESERVED_CALLER_KEYS.find((key) => Object.hasOwn(args, key))
   if (forged !== undefined) return refused("invalid_arguments", `${forged} is stamped by the store from the engine's caller and cannot be passed.`)
   let op = entry.op
+  const awaited = isToolSessionOp(entry) ? entry.await : undefined
   if (phase === "op") {
     let valid: boolean
     try {
@@ -87,9 +88,9 @@ export async function sessionCall(ctx: StoreContext, extensions: StoreExtensions
     }
   } else if (phase === "status" || phase === "expire") {
     const id = (args as { readonly await_request_id?: unknown }).await_request_id
-    if (entry.await === undefined) return refused("extension_unknown_op", `${name}.${entry.op} declares no await.`)
+    if (awaited === undefined) return refused("extension_unknown_op", `${name}.${entry.op} declares no await.`)
     if (typeof id !== "string" || !AWAIT_REQUEST_ID.test(id)) return refused("invalid_arguments", `await_request_id must match ${AWAIT_REQUEST_ID.source}.`)
-    op = phase === "status" ? entry.await.statusOp : entry.await.expireOp
+    op = phase === "status" ? awaited.statusOp : awaited.expireOp
   } else {
     return refused("invalid_arguments", `Unknown session call phase ${String(phase)}.`)
   }
@@ -100,8 +101,8 @@ export async function sessionCall(ctx: StoreContext, extensions: StoreExtensions
     ...(phase === "op" && typeof target === "string" && createdBy(ctx, caller, target) ? { caller_created_target: true } : {}),
   })
   const { wakeDir } = descriptor
-  const wake = entry.wake
+  const wake = isToolSessionOp(entry) ? entry.wake : undefined
   const effects = phase === "op" && wake !== undefined && wakeDir !== undefined ? [() => touchWake(ctx.config.agent_dir, wakeDir, wake)] : []
   const result = await extensions.run({ name, descriptor, module: loaded.module, op, args: stamped, effects }, request.now)
-  return phase === "op" && entry.await !== undefined && wakeDir !== undefined ? { result, await: { timeout_ms: entry.await.timeoutMs, wake_dir: wakeDir } } : { result }
+  return phase === "op" && awaited !== undefined && wakeDir !== undefined ? { result, await: { timeout_ms: awaited.timeoutMs, wake_dir: wakeDir } } : { result }
 }

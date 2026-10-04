@@ -109,9 +109,11 @@ function insertDescriptor(agentDir: string, name: string, toolName: string): voi
   try { db.query("INSERT INTO extension_registrations (name, descriptor_json, updated_at) VALUES (?, ?, 0)").run(name, JSON.stringify(descriptor)) } finally { db.close() }
 }
 
-test("#given a persisted declaration #when a session builds its tools #then one tool per declared op exists under ext_<extension>_<toolName>", async () => {
-  const { tools } = await surface([caller])
+test("#given a persisted declaration with a tool op and an internal op #when a session builds its tools #then the tool op exists under ext_<extension>_<toolName> and the internal op gets no tool", async () => {
+  const internal: SessionCallableOp = { op: "workItemStatus", internal: true, parameters: { type: "object", additionalProperties: false, properties: { status: { type: "string" } } } }
+  const { tools, store } = await surface([caller], fixtureModule.href, [openDeclaration, internal])
   expect(tools.map((tool) => tool.name)).toEqual(["ext_gw_open"])
+  expect((await store.sessionCallableOps()).map((op) => op.op)).toEqual(["openThread"])
 })
 
 test("#given declarations named bash and task, one composing a name the session already has, two rows composing the same name, and an extension with no declarations #when the session starts #then core tools stay intact, namespaced tools register, and each collision is skipped and logged once", async () => {

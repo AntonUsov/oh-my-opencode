@@ -38,6 +38,31 @@ const registration = (overrides: Partial<StoreExtensionRegistration> = {}): Stor
 
 const opened = (result: unknown) => (result as { kind: string; value: { received: Record<string, unknown> } }).value.received
 
+const internalRegistration = () => registration({ sessionCallable: [{ op: "openThread", internal: true, parameters, targetArg: "target_session_durable_id" }] })
+
+// Security contract: an internal op takes a session id the model must not be able to forge, so the public channel never reaches it.
+test("#given an internal session op #when the public extensionCall names it with a forged caller #then it is refused caller_not_allowed and the op never runs", async () => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  expect(await store.registerStoreExtension(internalRegistration())).toMatchObject({ kind: "ok" })
+  const forged = await store.extensionCall("gw", "openThread", { target_session_durable_id: "victim", caller_session_durable_id: "lead-session" })
+  expect(forged).toMatchObject({ kind: "refused", code: "caller_not_allowed" })
+  // openThread records every call it receives; deleting the records counts them.
+  expect(await store.extensionCall("gw", "sql", { sql: "DELETE FROM gw_opens" })).toEqual({ kind: "ok", value: 0 })
+})
+
+test("#given an internal session op #when the session's own component calls it through extensionSessionAwait #then it runs with the engine caller stamped and the forged one refused", async () => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  expect(await store.registerStoreExtension(internalRegistration())).toMatchObject({ kind: "ok" })
+  const result = await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
+  expect(result).toMatchObject({ kind: "ok" })
+  expect(opened(result)).toMatchObject({ target_session_durable_id: "child", caller_session_durable_id: "caller" })
+  const forged = await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child", caller_session_durable_id: "lead-session" }, { callerDurableId: "caller" })
+  expect(forged).toMatchObject({ kind: "refused", code: "invalid_arguments" })
+  expect(await store.extensionCall("gw", "sql", { sql: "DELETE FROM gw_opens" })).toEqual({ kind: "ok", value: 1 })
+})
+
 test("#given a session-callable op #when the public extensionCall names it #then it is refused caller_not_allowed (O7: a forged caller never reaches the op)", async () => {
   const h = (harness = createGatewayHarness())
   const store = h.store()
