@@ -16,6 +16,7 @@ const migrations = [[
   "CREATE TABLE gw_opens (id INTEGER PRIMARY KEY, args TEXT NOT NULL)",
   "CREATE TABLE gw_requests (id TEXT PRIMARY KEY, status TEXT NOT NULL)",
   "CREATE TABLE gw_items (binding_id TEXT PRIMARY KEY, status TEXT NOT NULL)",
+  "CREATE TABLE gw_leads (item TEXT PRIMARY KEY, lead TEXT NOT NULL)",
 ]]
 const openOp: SessionCallableOp = {
   op: "openThread",
@@ -30,7 +31,8 @@ const statusOp: SessionCallableOp = {
   op: "workItemStatus",
   toolName: "gw_work_item_status",
   description: "Report the status of the caller's own work item.",
-  parameters: { type: "object", additionalProperties: false, required: ["status"], properties: { status: { type: "string", enum: ["working", "waiting", "done"] }, note: { type: "string" } } },
+  parameters: { type: "object", additionalProperties: false, required: ["status"], properties: { status: { type: "string", enum: ["working", "waiting", "done", "failed"] }, note: { type: "string", maxLength: 500 }, work_item_id: { type: "string" } } },
+  wake: "requests.marker",
 }
 const registration = (overrides: Partial<StoreExtensionRegistration> = {}): StoreExtensionRegistration => ({
   name: "gw", moduleUrl, migrations, wakeDir: "thread-open", sessionCallable: [openOp, statusOp], ...overrides,
@@ -134,16 +136,27 @@ test("#given a binding that expired #when bindingsForSession runs #then it is no
   expect(await store.extensionSessionCall("gw", "workItemStatus", { status: "working" }, { callerDurableId: "bound" })).toMatchObject({ kind: "ok", value: { updated: false, reason: "no_binding" } })
 })
 
-test("#given a caller bound to item A #when it names item B #then the call is refused and B is untouched", async () => {
+test("#given a worker bound to item A #when it names item B whose lead is another session #then the op refuses it, because the caller it sees is the engine's and cannot be the lead's", async () => {
   const h = (harness = createGatewayHarness())
   const store = h.store()
   await store.registerStoreExtension(registration())
-  await bindTo(store, h, "caller-a", "chat-a")
-  const forged = await store.extensionSessionCall("gw", "workItemStatus", { status: "done", binding_id: "item-b" }, { callerDurableId: "caller-a" })
-  expect(forged).toMatchObject({ kind: "refused", code: "invalid_arguments" })
-  const own = await store.extensionSessionCall("gw", "workItemStatus", { status: "done" }, { callerDurableId: "caller-a" })
+  await bindTo(store, h, "worker-a", "chat-a")
+  await store.extensionCall("gw", "sql", { sql: "INSERT INTO gw_leads (item, lead) VALUES ('item-b', 'lead-b')" })
+  const named = await store.extensionSessionCall("gw", "workItemStatus", { status: "done", work_item_id: "item-b" }, { callerDurableId: "worker-a" })
+  expect(named).toMatchObject({ kind: "ok", value: { updated: false, reason: "not_item_lead" } })
+  const asLead = await store.extensionSessionCall("gw", "workItemStatus", { status: "done", work_item_id: "item-b", caller_session_durable_id: "lead-b" }, { callerDurableId: "worker-a" })
+  expect(asLead).toMatchObject({ kind: "refused", code: "invalid_arguments" })
+  const own = await store.extensionSessionCall("gw", "workItemStatus", { status: "done" }, { callerDurableId: "worker-a" })
   expect(own).toMatchObject({ kind: "ok", value: { updated: true } })
   expect((own as { value: { binding_id: string } }).value.binding_id).not.toBe("item-b")
+})
+
+test("#given the item's lead #when it names that item #then the op accepts it", async () => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  await store.registerStoreExtension(registration())
+  await store.extensionCall("gw", "sql", { sql: "INSERT INTO gw_leads (item, lead) VALUES ('item-b', 'lead-b')" })
+  expect(await store.extensionSessionCall("gw", "workItemStatus", { status: "failed", work_item_id: "item-b" }, { callerDurableId: "lead-b" })).toMatchObject({ kind: "ok", value: { updated: true, binding_id: "item-b" } })
 })
 
 test("#given a declared wake file #when a session call commits #then the marker is touched after the commit; a refused call and a rolled-back call do not touch it", async () => {
