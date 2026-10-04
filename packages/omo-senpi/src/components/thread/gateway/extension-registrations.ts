@@ -68,12 +68,16 @@ export function declarationProblem(descriptor: Pick<StoreExtensionRegistration, 
   if (sessionCallable === undefined) return undefined
   if (!Array.isArray(sessionCallable)) return "sessionCallable must be an array"
   const names = new Set<string>()
+  // The worker resolves a session call by `op`, so a second entry naming the same op would never apply.
+  const ops = new Set<string>()
   for (const entry of sessionCallable as readonly unknown[]) {
     const problem = entryProblem(entry, name, wakeDir)
     if (problem !== undefined) return problem
     const op = entry as SessionCallableOp
     if (names.has(op.toolName)) return `toolName ${op.toolName} is declared twice`
     names.add(op.toolName)
+    if (ops.has(op.op)) return `op ${op.op} is declared twice`
+    ops.add(op.op)
     if (exports === undefined) continue
     for (const exported of [op.op, ...(op.await === undefined ? [] : [op.await.statusOp, op.await.expireOp])]) {
       if (!Object.hasOwn(exports, exported) || typeof exports[exported] !== "function") return `${op.toolName}: the module exports no operation ${exported}`

@@ -58,6 +58,13 @@ test.each<[string, Partial<SessionCallableOp>]>([
   expect(await store.sessionCallableOps()).toEqual([])
 })
 
+test("#given two entries that declare the same op #when registering #then it is refused, because the worker resolves a session call by op and the second entry's schema, targetArg and await would never apply", async () => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  expect(await store.registerStoreExtension(registration({ sessionCallable: [openOp, { ...statusOp, op: openOp.op }] }))).toMatchObject({ kind: "refused", code: "invalid_arguments" })
+  expect(await store.sessionCallableOps()).toEqual([])
+})
+
 test.each(["../escape", "Thread-Open", ""])("#given wakeDir %p #when registering #then it is refused", async (wakeDir) => {
   const h = (harness = createGatewayHarness())
   expect(await h.store().registerStoreExtension(registration({ wakeDir }))).toMatchObject({ kind: "refused" })
