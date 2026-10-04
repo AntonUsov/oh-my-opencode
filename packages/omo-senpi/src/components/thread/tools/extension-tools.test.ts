@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite"
 import { afterEach, expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -10,6 +10,8 @@ import { createGatewayStore, type GatewayStore } from "../gateway/store"
 import type { SessionCallableOp, StoreExtensionRegistration } from "../gateway/store-extensions"
 import { createThreadTools, type ThreadHost, type ThreadHostSession } from "../tools"
 import { buildExtensionTools, registerExtensionTools } from "./extension-tools"
+import type { AnyTool } from "./internals"
+import { UNKNOWN_CALLER } from "./ports"
 
 const directories: string[] = []
 const stores: GatewayStore[] = []
@@ -73,7 +75,7 @@ async function surface(sessions: ThreadHostSession[], moduleUrl = fixtureModule.
   const store = storeAt(agentDir)
   expect(await store.registerStoreExtension(registration(moduleUrl, sessionCallable))).toMatchObject({ kind: "ok" })
   const host = hostWith(sessions)
-  const options = { host, store, stateDirectory: tempDir("extension-tools-state-"), callerSessionId: () => "UNKNOWN_CALLER", callerWorkspaceRoot: () => process.cwd() }
+  const options = { host, store, stateDirectory: tempDir("extension-tools-state-"), callerSessionId: () => UNKNOWN_CALLER, callerWorkspaceRoot: () => process.cwd() }
   const tools = await buildExtensionTools(options)
   return { agentDir, store, host, tools, options }
 }
@@ -87,7 +89,8 @@ function sessionStartHost(preRegistered: Readonly<Record<string, Record<string, 
     tools,
     registerTool(tool: Record<string, unknown>) {
       tools.set(String(tool.name), tool)
-      if (waiting?.name === tool.name) waiting.done()
+      const awaited = waiting
+      if (awaited?.name === tool.name) awaited.done()
     },
     getAllTools: () => [...tools.keys()].map((name) => ({ name })),
     on(event: string, handler: () => void) { if (event === "session_start") handlers.push(handler) },
@@ -151,20 +154,40 @@ test.each([
 ])("#given %s #when the engine names the caller by the routing id rpc-1 #then it resolves to no session and the tool answers caller_context_missing", async (_label, hosts) => {
   const { store, tools } = await surface([caller])
   const view = { sessions: hosts.flatMap((host) => ("list_sessions" in host ? host.list_sessions.sessions : [])), hosts, disk: [] }
-  const routed = await buildExtensionTools({ host: { ...hostWith([]), listView: async () => view }, store, stateDirectory: tempDir("extension-tools-routing-"), callerSessionId: () => "UNKNOWN_CALLER", callerWorkspaceRoot: () => process.cwd() })
+  const routed = await buildExtensionTools({ host: { ...hostWith([]), listView: async () => view }, store, stateDirectory: tempDir("extension-tools-routing-"), callerSessionId: () => UNKNOWN_CALLER, callerWorkspaceRoot: () => process.cwd() })
   expect(tools.map((tool) => tool.name)).toEqual(routed.map((tool) => tool.name))
   const output = await routed[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("rpc-1") as never)
   expect(resultOf(output)).toMatchObject({ kind: "refused", code: "caller_context_missing" })
 })
 
+// A thread that carries the UNKNOWN_CALLER placeholder as its durable id: only the guard, never a missing entry, refuses it.
+const placeholder = { sessionId: "route-placeholder", durableSessionId: UNKNOWN_CALLER, cwd: process.cwd(), name: "placeholder", status: "open" as const }
+
 test.each([
-  ["no execution context (UNKNOWN_CALLER fallback)", undefined],
+  ["no execution context (the component's UNKNOWN_CALLER fallback)", undefined],
   ["a runtime id no address book entry knows", ectxFor("route-stranger")],
 ])("#given %s #when the tool runs #then it answers caller_context_missing and the op never runs", async (_label, ectx) => {
-  const { tools } = await surface([caller])
+  const { tools } = await surface([caller, placeholder])
   const output = await tools[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectx as never)
   expect(resultOf(output)).toMatchObject({ code: "caller_context_missing" })
 })
+
+test("#given a declaration whose module records every import #when a fresh process's session starts #then its tools register and nothing is imported; only the first call imports the module", async () => {
+  const dir = tempDir("extension-tools-spy-")
+  const spy = join(dir, "spy-extension.mjs")
+  const imports = join(dir, "imports.log")
+  writeFileSync(spy, `import { appendFileSync } from "node:fs"\nappendFileSync(${JSON.stringify(imports)}, "import\\n")\n${await Bun.file(fixtureModule).text()}`)
+  const importCount = () => readFileSync(imports, "utf8").split("\n").filter(Boolean).length
+  const { agentDir, options } = await surface([caller], `file://${spy}`)
+  expect(importCount()).toBe(1)
+  const host = sessionStartHost({})
+  registerExtensionTools(host, { ...options, store: storeAt(agentDir) }, () => undefined)
+  await host.start("ext_gw_open")
+  expect(importCount()).toBe(1)
+  const tool = host.tools.get("ext_gw_open") as AnyTool
+  expect(resultOf(await tool.execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("dur-caller") as never))).toMatchObject({ kind: "ok" })
+  expect(importCount()).toBe(2)
+}, 10_000)
 
 test("#given args that try to name the caller #when the tool runs #then it is refused before validation and the op never runs", async () => {
   const { tools } = await surface([caller])
@@ -188,7 +211,7 @@ test("#given the caller creates a child with thread_create #when it opens a thre
   const peer = { sessionId: "route-peer", durableSessionId: "dur-peer", cwd: process.cwd(), name: "peer", status: "open" as const }
   const sessions: ThreadHostSession[] = [caller, peer]
   const { store, host, tools } = await surface(sessions)
-  const threadTools = createThreadTools({ host, store, stateDirectory: tempDir("extension-tools-create-"), callerSessionId: () => "UNKNOWN_CALLER", callerWorkspaceRoot: () => process.cwd() })
+  const threadTools = createThreadTools({ host, store, stateDirectory: tempDir("extension-tools-create-"), callerSessionId: () => UNKNOWN_CALLER, callerWorkspaceRoot: () => process.cwd() })
   sessions.push(child)
   const create = threadTools.find((tool) => tool.name === "thread_create")!
   expect(resultOf(await create.execute("call-c", { name: "new-child" }, undefined, undefined, ectxFor("dur-caller") as never))).toMatchObject({ kind: "ok" })

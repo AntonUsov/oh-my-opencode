@@ -173,9 +173,10 @@ test("#given process A registered gw from one location and process B later from 
   expect(await h.store().extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok", value: { relocated: true } })
 })
 
-test("#given no extension declarations #when a session lists ops #then the answer is empty and no extension module is imported", async () => {
+test("#given no gateway store file #when a session lists ops (session_start) #then the answer is empty and no store is opened or created", async () => {
   const h = (harness = createGatewayHarness())
   expect(await h.store().sessionCallableOps()).toEqual([])
+  expect(existsSync(gatewayDatabasePath(h.agentDir))).toBe(false)
 })
 
 test("#given a session bound with the core bind #when an op reads bindingsForSession in its transaction #then that binding is returned; another session gets none", async () => {
