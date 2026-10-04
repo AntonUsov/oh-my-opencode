@@ -236,11 +236,12 @@ function mockModel(id: string, name: string) {
   }
 }
 
-// The identity line is written by the in-process subagent prompt only. A per-child process and a
-// task daemon session both run senpi in `--mode rpc` while the driver's parent runs `-p`, so the rpc
-// argv is the structural child signal there (the same selector task-e2e-mock-provider.ts uses).
+// The identity line is written by the in-process subagent prompt only. A per-child process carries
+// OMO_SENPI_TASK_RPC_CHILD=1 from the process runner; that env marker is the signal that holds on Windows,
+// where the provider extension does not see the `--mode rpc` argv. A task daemon session still runs in
+// `--mode rpc` while the driver's parent runs `-p`, so the rpc argv stays a second signal there.
 function isChild(context: Context): boolean {
-  return messagesContainChild(context) || process.argv.includes("rpc")
+  return messagesContainChild(context) || process.env.OMO_SENPI_TASK_RPC_CHILD === "1" || process.argv.includes("rpc")
 }
 
 function hasToolResult(context: Context): boolean {
