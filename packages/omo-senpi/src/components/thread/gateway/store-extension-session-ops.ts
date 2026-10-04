@@ -74,15 +74,24 @@ export async function sessionCall(ctx: StoreContext, extensions: StoreExtensions
   if (forged !== undefined) return refused("invalid_arguments", `${forged} is stamped by the store from the engine's caller and cannot be passed.`)
   let op = entry.op
   if (phase === "op") {
-    if (!Value.Check(entry.parameters, args)) {
+    let valid: boolean
+    try {
+      valid = Value.Check(entry.parameters, args)
+    } catch (error) {
+      // A schema typebox only rejects once a value reaches the bad part (an invalid pattern).
+      return refused("invalid_arguments", `${name}.${entry.op} declares parameters that cannot be checked: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (!valid) {
       const [first] = Value.Errors(entry.parameters, args)
       return refused("invalid_arguments", `Parameter validation failed at ${first?.instancePath || "/"}: ${first?.message ?? "invalid value"}`)
     }
-  } else {
+  } else if (phase === "status" || phase === "expire") {
     const id = (args as { readonly await_request_id?: unknown }).await_request_id
     if (entry.await === undefined) return refused("extension_unknown_op", `${name}.${entry.op} declares no await.`)
     if (typeof id !== "string" || !AWAIT_REQUEST_ID.test(id)) return refused("invalid_arguments", `await_request_id must match ${AWAIT_REQUEST_ID.source}.`)
     op = phase === "status" ? entry.await.statusOp : entry.await.expireOp
+  } else {
+    return refused("invalid_arguments", `Unknown session call phase ${String(phase)}.`)
   }
   const target = entry.targetArg === undefined ? undefined : (args as Record<string, unknown>)[entry.targetArg]
   const stamped = () => ({

@@ -59,6 +59,14 @@ test.each<[string, Partial<SessionCallableOp>]>([
   expect(await store.sessionCallableOps()).toEqual([])
 })
 
+test("#given declared parameters whose schema only fails when a value reaches it (an invalid pattern) #when a session call carries that field #then it is refused invalid_arguments, never a thrown tool error", async () => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  const broken = { ...statusOp, parameters: { ...statusOp.parameters, properties: { status: { type: "string", pattern: "(" } } } }
+  expect(await store.registerStoreExtension(registration({ sessionCallable: [broken] }))).toMatchObject({ kind: "ok" })
+  expect(await store.extensionSessionAwait("gw", "workItemStatus", { status: "working" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused", code: "invalid_arguments" })
+})
+
 test("#given two entries that declare the same op #when registering #then it is refused, because the worker resolves a session call by op and the second entry's schema, targetArg and await would never apply", async () => {
   const h = (harness = createGatewayHarness())
   const store = h.store()
@@ -137,7 +145,7 @@ test("#given a persisted moduleUrl that is not a file .js/.mjs/.cjs URL #when th
   await h.store().registerStoreExtension(registration())
   const db = new (await import("bun:sqlite")).Database(gatewayDatabasePath(h.agentDir))
   try { db.query("UPDATE extension_registrations SET descriptor_json = json_set(descriptor_json, '$.moduleUrl', 'https://example.invalid/x.mjs') WHERE name = 'gw'").run() } finally { db.close() }
-  expect(await h.store().extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused" })
+  expect(await h.store().extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused", code: "extension_import_failed" })
 })
 
 test("#given the same extension registered again from a second location #when listing #then exactly one descriptor exists and the new module is called", async () => {

@@ -83,7 +83,7 @@ export class StoreExtensions {
     return this.registered.get(descriptor.name)?.descriptor === descriptor
   }
 
-  async ensure(descriptor: Pick<StoreExtensionRegistration, "name" | "migrations">, now: number): Promise<number> {
+  private async ensure(descriptor: Pick<StoreExtensionRegistration, "name" | "migrations">, now: number): Promise<number> {
     const { name, migrations } = descriptor
     for (;;) {
       const step = await transaction(this.ctx, "extension_migrate", () => {

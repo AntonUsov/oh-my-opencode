@@ -234,6 +234,7 @@ test("#given a store at the previous schema version with data #when it opens #th
   const db = new Database(path)
   try {
     db.exec("DROP TABLE IF EXISTS thread_creations; DROP TABLE IF EXISTS extension_registrations;")
+    db.exec("DELETE FROM extension_objects WHERE name IN ('thread_creations', 'extension_registrations')")
     db.exec(`PRAGMA user_version = ${previous}`)
     db.query("INSERT INTO gateway_meta (key, value) VALUES ('fixture-keep', 'kept')").run()
   } finally { db.close() }
@@ -244,5 +245,8 @@ test("#given a store at the previous schema version with data #when it opens #th
     expect(check.query("SELECT value FROM gateway_meta WHERE key = 'fixture-keep'").get()).toEqual({ value: "kept" })
     const tables = check.query("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('thread_creations', 'extension_registrations') ORDER BY name").all()
     expect(tables).toEqual([{ name: "extension_registrations" }, { name: "thread_creations" }])
+    // v10 reserves both as core objects again, so no extension can register a name that prefixes them.
+    const reserved = check.query("SELECT name, owner FROM extension_objects WHERE type = 'table' AND name IN ('thread_creations', 'extension_registrations') ORDER BY name").all()
+    expect(reserved).toEqual([{ name: "extension_registrations", owner: null }, { name: "thread_creations", owner: null }])
   } finally { check.close() }
 })
