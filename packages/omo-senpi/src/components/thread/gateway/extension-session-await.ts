@@ -1,4 +1,4 @@
-import { watch, type FSWatcher } from "node:fs"
+import { existsSync, watch, type FSWatcher } from "node:fs"
 import { basename, dirname } from "node:path"
 
 import type { StoreExtensionResult } from "./store-extensions"
@@ -22,8 +22,9 @@ function settled(result: StoreExtensionResult<unknown>): boolean {
  * Waits for a session op's await without polling. The watch on the wake file and its directory is
  * armed FIRST, then `status` runs once (a completion that landed before the watch is caught here),
  * then every wake re-checks `status`. At `timeoutMs`, `expire` runs and then `status` once more, so an
- * open that completes during the expiry still returns as opened. A missing directory (the connector
- * is not running) or a dropped event costs at most `timeoutMs`, never correctness.
+ * open that completes during the expiry still returns as opened. A missing wake directory means no
+ * connector has started, so nothing can complete the request: it expires at once instead of making
+ * the caller wait `timeoutMs`. A dropped event costs at most `timeoutMs`, never correctness.
  */
 export async function awaitSessionRequest(request: SessionAwait): Promise<StoreExtensionResult<unknown>> {
   let woken = false
@@ -31,6 +32,12 @@ export async function awaitSessionRequest(request: SessionAwait): Promise<StoreE
   const signal = (): void => {
     woken = true
     wake?.()
+  }
+  if (!existsSync(dirname(request.file))) {
+    const current = await request.status()
+    if (settled(current)) return current
+    await request.expire()
+    return await request.status()
   }
   const name = basename(request.file)
   const watchers: FSWatcher[] = []

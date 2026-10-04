@@ -212,11 +212,21 @@ test("#given the connector completes while the tool waits #when its wake file is
   expect(await waiting).toMatchObject({ kind: "ok", value: { status: "opened" } })
 })
 
-test("#given no wake ever arrives #when timeoutMs passes #then expireOp runs and the final status is returned", async () => {
+test("#given a running connector (wake dir present) but no wake ever arrives #when timeoutMs passes #then expireOp runs and the final status is returned", async () => {
   const h = (harness = createGatewayHarness())
   const store = h.store()
   await store.registerStoreExtension(registration({ sessionCallable: [{ ...openOp, await: { ...openOp.await!, timeoutMs: 50 } }] }))
+  mkdirSync(join(dirname(gatewayDatabasePath(h.agentDir)), "thread-open"), { recursive: true })
   const id = "tor_" + "3".repeat(32)
+  const result = await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child", await: true, await_request_id: id }, { callerDurableId: "caller" })
+  expect(result).toMatchObject({ kind: "ok", value: { status: "refused" } })
+})
+
+test("#given no connector has started (no wake dir) #when the tool awaits with a long timeout #then it expires at once instead of waiting it out", async () => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  await store.registerStoreExtension(registration({ sessionCallable: [{ ...openOp, await: { ...openOp.await!, timeoutMs: 120_000 } }] }))
+  const id = "tor_" + "4".repeat(32)
   const result = await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child", await: true, await_request_id: id }, { callerDurableId: "caller" })
   expect(result).toMatchObject({ kind: "ok", value: { status: "refused" } })
 })
