@@ -10,6 +10,9 @@ import type { SessionCaller, StoreExtensionApi, StoreExtensionRefusal, StoreExte
 /** The worker's registration reply: the caller's result, and whether calls for that name now use this registration. */
 export type ExtensionRegisterReply = { readonly result: StoreExtensionResult<{ readonly version: number }>; readonly retained: boolean }
 
+/** A registration the current worker holds, with the time it was made: a restarted worker replays it as of then. */
+export type RetainedRegistration = { readonly extension: StoreExtensionRegistration; readonly registeredAt: number }
+
 export type ThreadCreationRecord = { readonly creator_durable_id: string; readonly created_durable_id: string }
 
 export type ExtensionFacade = StoreExtensionApi & StoreExtensionSessionApi & {
@@ -22,7 +25,7 @@ type FacadeDeps = {
   readonly now: () => number
   readonly call: <T>(op: string, args?: unknown) => Promise<T>
   /** The registrations the current worker holds, restored on the next worker after one exits. */
-  readonly registrations: Map<string, StoreExtensionRegistration>
+  readonly registrations: Map<string, RetainedRegistration>
   /** Test seam: an await armed its watch and read a non-final status (`awaitSessionRequest` `onArmed`). */
   readonly onAwaitArmed?: (awaitRequestId: string) => void
 }
@@ -69,12 +72,13 @@ export function createExtensionFacade(deps: FacadeDeps): ExtensionFacade {
   return {
     registerStoreExtension: async (extension) => {
       let reply: ExtensionRegisterReply
+      const registeredAt = now()
       try {
-        reply = await call("extension_register", { extension, now: now() })
+        reply = await call("extension_register", { extension, now: registeredAt })
       } catch (error) {
         return schemaTooNew(error)
       }
-      if (reply.retained) registrations.set(extension.name, structuredClone(extension))
+      if (reply.retained) registrations.set(extension.name, { extension: structuredClone(extension), registeredAt })
       return reply.result
     },
     extensionCall: async (name, op, args) => {

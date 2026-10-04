@@ -39,7 +39,8 @@ export class StoreExtensions {
 
   constructor(private readonly ctx: StoreContext, private readonly resolveTarget: GatewayResolve) {}
 
-  async register(descriptor: StoreExtensionRegistration, now: number): Promise<StoreExtensionResult<{ readonly version: number }>> {
+  /** `restoredAt`: a restarted worker replaying a registration this process made then (`persistDescriptor`). */
+  async register(descriptor: StoreExtensionRegistration, now: number, restoredAt?: number): Promise<StoreExtensionResult<{ readonly version: number }>> {
     if (!/^[a-z][a-z0-9_]{1,31}$/.test(descriptor.name) || !Array.isArray(descriptor.migrations)
       || !descriptor.migrations.every((step) => Array.isArray(step) && step.every((sql) => typeof sql === "string"))) {
       return refusal("invalid_arguments", "An extension needs a valid namespace and an array of SQL migration steps.")
@@ -66,7 +67,7 @@ export class StoreExtensions {
     try {
       const version = await this.ensure(descriptor, now)
       // The newest registration of a name replaces its persisted descriptor, so every process lists its session ops.
-      const raced = await transaction(this.ctx, "extension_register", () => persistDescriptor(this.ctx, descriptor, now))
+      const raced = await transaction(this.ctx, "extension_register", () => persistDescriptor(this.ctx, descriptor, now, restoredAt))
       if (raced !== undefined) return refusal("invalid_arguments", `Extension ${descriptor.name}: ${raced}.`)
       this.registered.set(descriptor.name, { descriptor, module })
       return { kind: "ok", value: { version } }

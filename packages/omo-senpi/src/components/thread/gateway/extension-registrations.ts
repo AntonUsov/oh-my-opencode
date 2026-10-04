@@ -129,8 +129,12 @@ export function toolNameTaken(ctx: StoreContext, descriptor: Pick<StoreExtension
   return taken === undefined ? undefined : `tool ${taken.registeredName} is already declared by extension ${taken.extension}`
 }
 
-/** Upserts the descriptor (newest registration wins); refuses a tool name another extension already composes. Runs inside the caller's transaction. */
-export function persistDescriptor(ctx: StoreContext, descriptor: StoreExtensionRegistration, now: number): string | undefined {
+/**
+ * Upserts the descriptor (newest registration wins); refuses a tool name another extension already
+ * composes. `restoredAt` marks a worker restart replaying a registration made at that time: it never
+ * overwrites a row another process registered since. Runs inside the caller's transaction.
+ */
+export function persistDescriptor(ctx: StoreContext, descriptor: StoreExtensionRegistration, now: number, restoredAt?: number): string | undefined {
   const taken = toolNameTaken(ctx, descriptor)
   if (taken !== undefined) return taken
   const persisted: PersistedDescriptor = {
@@ -139,9 +143,10 @@ export function persistDescriptor(ctx: StoreContext, descriptor: StoreExtensionR
     ...(descriptor.sessionCallable === undefined ? {} : { sessionCallable: descriptor.sessionCallable }),
     ...(descriptor.wakeDir === undefined ? {} : { wakeDir: descriptor.wakeDir }),
   }
+  const newerOnly = restoredAt === undefined ? "" : " WHERE excluded.updated_at >= extension_registrations.updated_at"
   ctx.sql.run(
-    "INSERT INTO extension_registrations (name, descriptor_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET descriptor_json = excluded.descriptor_json, updated_at = excluded.updated_at",
-    [descriptor.name, JSON.stringify(persisted), now],
+    `INSERT INTO extension_registrations (name, descriptor_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET descriptor_json = excluded.descriptor_json, updated_at = excluded.updated_at${newerOnly}`,
+    [descriptor.name, JSON.stringify(persisted), restoredAt ?? now],
   )
   return undefined
 }

@@ -130,9 +130,9 @@ async function dispatch(op: string, args: unknown): Promise<unknown> {
   const ctx = requireContext()
   switch (op) {
     case "extension_register": {
-      const request = args as { readonly extension: StoreExtensionRegistration; readonly now: number }
+      const request = args as { readonly extension: StoreExtensionRegistration; readonly now: number; readonly restored_at?: number }
       lastExtensionActivity = request.extension.name
-      const result = await extensions?.register(request.extension, request.now)
+      const result = await extensions?.register(request.extension, request.now, request.restored_at)
       return { result, retained: extensions?.holds(request.extension) === true }
     }
     case "extension_call":

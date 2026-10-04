@@ -7,8 +7,7 @@ import { GATEWAY_BUSY_TIMEOUT_MS, GATEWAY_LOCK_WAIT_MAX_MS } from "./constants"
 import type { GatewayResolve } from "./engine"
 import type { GatewayStore } from "./store-api"
 export type { Deduplicated, DeliveryView, GatewayStore, OutboxPage, ReceiptScope } from "./store-api"
-import { createExtensionFacade, type ExtensionRegisterReply } from "./store-extension-facade"
-import type { StoreExtensionRegistration } from "./store-extensions"
+import { createExtensionFacade, type ExtensionRegisterReply, type RetainedRegistration } from "./store-extension-facade"
 export type { DeclaredSessionOp, SessionCallableOp, SessionCaller, StoreExtensionApi, StoreExtensionOperation, StoreExtensionRefusal, StoreExtensionRefusalCode, StoreExtensionRegistration, StoreExtensionResult, StoreExtensionSessionApi, StoreExtensionTransaction } from "./store-extensions"
 import type { GatewayStoreConfig, GatewayStoreEvent, GatewayStoreTestHooks, ProcessIdentity } from "./types"
 
@@ -77,7 +76,7 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
   let disposed = false
   let resolveTarget = options.resolveTarget
   /** The registrations the current worker holds, restored on the next worker after one exits. */
-  const registrations = new Map<string, StoreExtensionRegistration>()
+  const registrations = new Map<string, RetainedRegistration>()
 
   const resolveExtensionTarget: GatewayResolve = async (address, request) => {
     if (resolveTarget === undefined) {
@@ -154,9 +153,10 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     options._test?.onWorkerStarted?.(spawned)
     const attempt = (post("init", { config, now: now() }) as Promise<{ readonly self: ProcessIdentity; readonly legacy_migrated: number }>).then(async (value) => {
       // A fresh worker holds no extension registrations: restore the ones its predecessor held
-      // before any call reaches it, keeping only those the new worker holds in turn.
-      for (const [name, extension] of registrations) {
-        const reply = (await post("extension_register", { extension, now: now() })) as ExtensionRegisterReply
+      // before any call reaches it, keeping only those the new worker holds in turn. Each is replayed
+      // as of its registration time, so it never overwrites a newer one another process persisted.
+      for (const [name, { extension, registeredAt }] of registrations) {
+        const reply = (await post("extension_register", { extension, now: now(), restored_at: registeredAt })) as ExtensionRegisterReply
         if (!reply.retained) registrations.delete(name)
       }
       return value

@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
+import type { Worker } from "node:worker_threads"
 
 import { createGatewayRelay } from "./relay"
 import { gatewayDatabasePath } from "./paths"
@@ -149,6 +150,27 @@ test("#given the same extension registered again from a second location #when li
   const later = h.store()
   expect(await later.sessionCallableOps()).toHaveLength(2)
   expect(await later.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok", value: { relocated: true } })
+})
+
+test("#given process A registered gw from one location and process B later from another #when A's store worker restarts and restores A's registration #then the persisted descriptor stays B's newer one", async () => {
+  const h = (harness = createGatewayHarness())
+  const relocated = join(h.agentDir, "relocated", "session-callable-extension.mjs")
+  mkdirSync(dirname(relocated), { recursive: true })
+  writeFileSync(relocated, (await Bun.file(new URL(moduleUrl)).text()).replace("opened: true", "opened: true, relocated: true"))
+  let workerA: Worker | undefined
+  const a = h.store({ _test: { onWorkerStarted: (worker) => { workerA = worker } } })
+  expect(await a.registerStoreExtension(registration())).toMatchObject({ kind: "ok" })
+  h.clock.now += 60_000
+  expect(await h.store().registerStoreExtension(registration({ moduleUrl: `file://${relocated}` }))).toMatchObject({ kind: "ok" })
+  const crashed = workerA!
+  const exited = new Promise<void>((resolve) => crashed.once("exit", () => resolve()))
+  await crashed.terminate()
+  await exited
+  h.clock.now += 60_000
+  // A's next call starts a fresh worker, which restores A's older registration before running it.
+  expect(await a.extensionCall("gw", "completeThreadOpen", { await_request_id: "tor_" + "6".repeat(32) })).toMatchObject({ kind: "ok" })
+  expect(workerA).not.toBe(crashed)
+  expect(await h.store().extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok", value: { relocated: true } })
 })
 
 test("#given no extension declarations #when a session lists ops #then the answer is empty and no extension module is imported", async () => {
