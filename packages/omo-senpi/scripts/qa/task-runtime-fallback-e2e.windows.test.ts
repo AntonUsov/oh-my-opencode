@@ -14,8 +14,8 @@ import { expect, test } from "bun:test"
 const isWin32 = process.platform === "win32"
 const driverPath = fileURLToPath(new URL("./task-runtime-fallback-e2e.mjs", import.meta.url))
 const SCENARIOS = ["user-fallback", "limit-after-tool", "limit-near-compaction"]
-// Three scenarios, each a parent turn plus a child (a few seconds warm, up to 120 s on a cold runner).
-const DRIVER_TIMEOUT_MS = 480_000
+// Three scenarios, each a parent turn plus a child (a few seconds warm, up to 240 s each on a cold runner).
+const DRIVER_TIMEOUT_MS = 900_000
 
 type ScenarioVerdict = {
   readonly runner: string

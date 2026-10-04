@@ -369,7 +369,8 @@ async function runScenario(scenario, runner, outDir) {
         },
         encoding: "utf8",
         windowsHide: true,
-        timeout: 120_000,
+        // A cold Windows runner needs well over a minute for a parent turn plus a child and its fallback.
+        timeout: process.platform === "win32" ? 240_000 : 120_000,
         maxBuffer: 64 * 1024 * 1024,
       },
     )

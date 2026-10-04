@@ -85,11 +85,11 @@ const LIMIT_AFTER_TOOL_ERROR = "You've hit your session limit · resets 3pm (Asi
 // "limit-near-compaction" (#9582): the same tool-then-limit turn, but the tool-call response reports a
 // context past the compaction threshold (window minus the 16384-token compaction reserve), so the engine
 // compacts before it retries. A pre-retry compaction runs on the CURRENT model, which is spent: the child
-// must still reach its fallback. The window stays above senpi's start minimum (about 52K tokens with the
-// omo tool schemas), or the session would be refused before the turn.
+// must still reach its fallback. The window stays well above senpi's start minimum (about 52K tokens with
+// the omo tool schemas on macOS, more where more tools load), or the session is refused before the turn.
 const LIMIT_NEAR_COMPACTION = "limit-near-compaction"
-const NEAR_COMPACTION_WINDOW = 80_000
-const NEAR_COMPACTION_INPUT = 66_000
+const NEAR_COMPACTION_WINDOW = 128_000
+const NEAR_COMPACTION_INPUT = 114_000
 let parentCalls = 0
 
 export default function registerFallbackMockProvider(pi: ExtensionAPI): void {
