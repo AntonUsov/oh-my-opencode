@@ -37,6 +37,8 @@ function processRunner(capabilities: readonly string[]): FakeEngine {
   const warnings: string[] = []
   const log = join(tempDir(), "commands.jsonl")
   const runner = new RpcProcessRunner({
+    // Model admission probes a real catalog (seconds on a cold Windows runner); it is not what these tests cover.
+    modelAdmission: async () => {},
     onWarning: (message) => void warnings.push(message),
     spawnChild: (descriptor) => {
       const child = spawnFakeChild({ ...descriptor.env, FAKE_CAPABILITIES: capabilities.join(","), FAKE_COMMAND_LOG: log })
