@@ -18,9 +18,9 @@ test("#given an A snapshot before workers move to B #when the old A push arrives
   expect(stale).toMatchObject({ kind: "conflict" })
   const currentA = (await f.call<{ version: number }>("scopeMembersVersion", { scope: "A" })).version
   expect(currentA).toBeGreaterThan(oldA)
-  expect(await f.call("memberForSession", { session_durable_id: "source-lead" })).toMatchObject({ scope: "A", version: currentA })
+  expect(await f.callAs("source-lead", "memberForSession")).toMatchObject({ scope: "A", version: currentA })
   for (const member of original.slice(1)) {
-    expect(await f.call("memberForSession", { session_durable_id: member.session_durable_id })).toMatchObject({ scope: "B", memory_identity: "team-B" })
+    expect(await f.callAs(member.session_durable_id, "memberForSession")).toMatchObject({ scope: "B", memory_identity: "team-B" })
   }
 })
 const worker = { session_durable_id: "worker", role: "worker" } as const
@@ -30,7 +30,7 @@ test("#given competing membership pushes #when both use one expected version #th
   expect(await f.call<{ readonly version: number }>("scopeMembersVersion", { scope: "A" })).toEqual({ version: 0 })
   expect(await f.members("A", "team-A", [worker], 0)).toEqual({ kind: "committed", version: 1 })
   expect(await f.members("A", "replacement", [], 0)).toEqual({ kind: "conflict", version: 1 })
-  expect(await f.call("memberForSession", { session_durable_id: "worker" })).toMatchObject({ memory_identity: "team-A", version: 1 })
+  expect(await f.callAs("worker", "memberForSession")).toMatchObject({ memory_identity: "team-A", version: 1 })
   expect((await f.learn("worker", { text: "first push wins" })).isError).not.toBe(true)
 })
 
@@ -47,7 +47,7 @@ test("#given membership #when an empty push clears it #then the next learning ca
 test("#given a null memory identity #when a member learns or renders #then membership remains but memory stays off", async () => {
   const f = fixture = await scopeFixture()
   await f.members("A", null, [worker])
-  expect(await f.call("memberForSession", { session_durable_id: "worker" })).toMatchObject({ memory_identity: null })
+  expect(await f.callAs("worker", "memberForSession")).toMatchObject({ memory_identity: null })
   expect(await f.prompt("worker", "BASE \n")).toBe("BASE \n")
   const refused = await f.learn("worker", { text: "no repository" })
   expect(refused.isError).toBe(true)
@@ -68,7 +68,7 @@ test("#given invalid connector payloads #when pushed #then they are refused with
     expect((await f.store.extensionCall("gateway_rules", "scopeMembersCommitted", payload)).kind).toBe("refused")
   }
   expect(await f.call<{ readonly version: number }>("scopeMembersVersion", { scope: "A" })).toEqual({ version: 0 })
-  expect(await f.call("memberForSession", { session_durable_id: "worker" })).toBeNull()
+  expect(await f.callAs("worker", "memberForSession")).toBeNull()
 })
 
 test("#given no engine caller or no membership #when learning is called #then it is refused without creating a repository", async () => {

@@ -3,7 +3,7 @@ import { z } from "zod"
 import type { StoreExtensionTransaction } from "../../thread/gateway/store-extensions"
 
 const Scope = z.string().trim().min(1)
-const Session = z.strictObject({ session_durable_id: z.string().min(1) })
+const Caller = z.strictObject({ caller_session_durable_id: z.string().min(1) })
 const Member = z.strictObject({
   session_durable_id: z.string().min(1),
   role: z.enum(["lead", "worker"]),
@@ -44,7 +44,7 @@ export function scopeMembersCommitted(tx: StoreExtensionTransaction, args: unkno
   tx.exec("DELETE FROM gateway_rules_scope_members WHERE scope = ?", [input.scope])
   const movedFrom = new Set<string>()
   for (const member of input.members) {
-    const previous = memberForSession(tx, { session_durable_id: member.session_durable_id })
+    const previous = memberRow(tx, member.session_durable_id)
     if (previous !== null && previous.scope !== input.scope && !movedFrom.has(previous.scope)) {
       tx.exec("UPDATE gateway_rules_scope_versions SET version = version + 1, updated_at = ? WHERE scope = ?", [input.now, previous.scope])
       tx.exec("UPDATE gateway_rules_scope_members SET version = version + 1 WHERE scope = ?", [previous.scope])
@@ -59,8 +59,12 @@ export function scopeMembersCommitted(tx: StoreExtensionTransaction, args: unkno
   return { kind: "committed", version: next }
 }
 
+/** The caller's own member row (an internal session op: the store stamps the caller). */
 export function memberForSession(tx: StoreExtensionTransaction, args: unknown): ScopeMember | null {
-  const { session_durable_id } = Session.parse(args)
+  return memberRow(tx, Caller.parse(args).caller_session_durable_id)
+}
+
+export function memberRow(tx: StoreExtensionTransaction, session_durable_id: string): ScopeMember | null {
   const row = tx.one(
     ["scope", "session_durable_id", "role", "memory_identity", "version"],
     "SELECT scope, session_durable_id, role, memory_identity, version FROM gateway_rules_scope_members WHERE session_durable_id = ?",

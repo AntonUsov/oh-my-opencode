@@ -20,8 +20,7 @@ export function registerGatewayLearning(pi: SenpiExtensionAPI, access: GatewaySc
       if (session === undefined) return result({ kind: "refused", reason: "gateway_learning requires an engine-stamped caller session" })
       const cwd = eventCtx !== null && typeof eventCtx === "object" && typeof Reflect.get(eventCtx, "cwd") === "string"
         ? String(Reflect.get(eventCtx, "cwd")) : pi.cwd ?? process.cwd()
-      const committed = await access.call("learningCommitted", {
-        session_durable_id: session,
+      const committed = await access.callAs(session, "learningCommitted", {
         text: parsed.data.text,
         cwd,
         memory_home: access.memoryHome(cwd),

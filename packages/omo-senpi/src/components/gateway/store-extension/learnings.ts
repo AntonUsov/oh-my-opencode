@@ -7,10 +7,10 @@ import {
 import { z } from "zod"
 
 import type { StoreExtensionTransaction } from "../../thread/gateway/store-extensions"
-import { memberForSession } from "./scope-members"
+import { memberRow } from "./scope-members"
 import { resolveScopeMemoryIdentity } from "../scope-identity"
 
-const Caller = z.strictObject({ session_durable_id: z.string().min(1) })
+const Caller = z.strictObject({ caller_session_durable_id: z.string().min(1) })
 const Learning = Caller.extend({
   text: z.string().trim().min(1).max(16_384),
   cwd: z.string().min(1),
@@ -20,7 +20,7 @@ const Learning = Caller.extend({
 
 export async function learningCommitted(tx: StoreExtensionTransaction, args: unknown) {
   const input = Learning.parse(args)
-  const member = memberForSession(tx, { session_durable_id: input.session_durable_id })
+  const member = memberRow(tx, input.caller_session_durable_id)
   if (member === null) return { kind: "refused", reason: "gateway_learning requires current scope membership" }
   if (member.memory_identity === null) return { kind: "refused", reason: "this scope has no memory_identity" }
   const identity = resolveScopeMemoryIdentity(member.scope, member.memory_identity, input.memory_home, input.cwd)
@@ -58,13 +58,13 @@ export async function learningCommitted(tx: StoreExtensionTransaction, args: unk
 }
 
 export function digestForSession(tx: StoreExtensionTransaction, args: unknown) {
-  const caller = Caller.parse(args)
-  const member = memberForSession(tx, caller)
+  const caller = Caller.parse(args).caller_session_durable_id
+  const member = memberRow(tx, caller)
   if (member === null || member.role !== "lead" || member.memory_identity === null) return { entries: [] }
   const cursor = tx.one(
     ["last_seq"],
     "SELECT last_seq FROM gateway_rules_digest_cursors WHERE scope = ? AND session_durable_id = ?",
-    [member.scope, caller.session_durable_id],
+    [member.scope, caller],
   )
   const entries = tx.all(
     ["seq", "path", "title", "by_session", "at"],
@@ -77,12 +77,12 @@ export function digestForSession(tx: StoreExtensionTransaction, args: unknown) {
 
 export function digestDelivered(tx: StoreExtensionTransaction, args: unknown) {
   const input = z.strictObject({
-    session_durable_id: z.string().min(1),
+    caller_session_durable_id: z.string().min(1),
     scope: z.string().min(1),
     version: z.number().int(),
     last_seq: z.number().int().nonnegative(),
   }).parse(args)
-  const member = memberForSession(tx, { session_durable_id: input.session_durable_id })
+  const member = memberRow(tx, input.caller_session_durable_id)
   if (member === null || member.role !== "lead" || member.scope !== input.scope || member.version !== input.version) {
     return { kind: "conflict" }
   }

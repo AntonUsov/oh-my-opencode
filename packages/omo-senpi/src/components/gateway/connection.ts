@@ -8,12 +8,14 @@ import { gatewayDatabasePath } from "../thread/gateway/paths"
 import { createGatewayStore } from "../thread/gateway/store"
 import type { GatewayRulesStore } from "./prompt"
 import { GATEWAY_RULES_EXTENSION_NAME, GATEWAY_RULES_MIGRATIONS } from "./store-extension/migrations"
+import { GATEWAY_RULES_SESSION_OPS } from "./store-extension/session-ops"
+import type { StoreExtensionRegistration } from "../thread/gateway/store-extensions"
 
 export const GATEWAY_RULES_EXTENSION_BUNDLE_NAME = "gateway-rules-extension.mjs"
 
 export interface GatewayConnectionOptions {
   readonly agentDir?: () => string
-  readonly createStore?: (agentDir: string) => GatewayRulesStore & { readonly registerStoreExtension: (descriptor: { readonly name: string; readonly migrations: readonly (readonly string[])[]; readonly moduleUrl: string }) => Promise<unknown> }
+  readonly createStore?: (agentDir: string) => GatewayRulesStore & { readonly registerStoreExtension: (descriptor: StoreExtensionRegistration) => Promise<unknown> }
   readonly loadGatewaySection?: () => unknown
   readonly resolveModuleUrl?: () => string | undefined
 }
@@ -35,7 +37,7 @@ export function createGatewayConnection(options: GatewayConnectionOptions, logge
       return undefined
     }
     const created = (options.createStore ?? ((agentDir) => createGatewayStore({ agentDir })))(agentDir)
-    const registered = await created.registerStoreExtension({ name: GATEWAY_RULES_EXTENSION_NAME, migrations: GATEWAY_RULES_MIGRATIONS, moduleUrl })
+    const registered = await created.registerStoreExtension({ name: GATEWAY_RULES_EXTENSION_NAME, migrations: GATEWAY_RULES_MIGRATIONS, moduleUrl, sessionCallable: GATEWAY_RULES_SESSION_OPS })
     if (registered === null || typeof registered !== "object" || Reflect.get(registered, "kind") !== "ok") {
       if (!registrationWarned) {
         registrationWarned = true

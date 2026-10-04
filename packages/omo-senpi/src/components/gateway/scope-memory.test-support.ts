@@ -8,6 +8,7 @@ import { createGatewayHarness } from "../thread/gateway/testing/harness"
 import { FakeExtensionAPI } from "../../../test-support/fake-extension-api"
 import { createGatewayComponent } from "./index"
 import { GATEWAY_RULES_EXTENSION_NAME, GATEWAY_RULES_MIGRATIONS } from "./store-extension/migrations"
+import { GATEWAY_RULES_SESSION_OPS } from "./store-extension/session-ops"
 import { resolveScopeMemoryIdentity } from "./scope-identity"
 
 const logger = { info() {}, warn() {}, error() {} }
@@ -24,7 +25,7 @@ export async function scopeFixture(options: { relativeMemoryHome?: boolean } = {
   const moduleUrl = pathToFileURL(join(root, "scope-extension.mjs")).href
   const harness = createGatewayHarness()
   const store = harness.store()
-  const registered = await store.registerStoreExtension({ name: GATEWAY_RULES_EXTENSION_NAME, migrations: GATEWAY_RULES_MIGRATIONS, moduleUrl })
+  const registered = await store.registerStoreExtension({ name: GATEWAY_RULES_EXTENSION_NAME, migrations: GATEWAY_RULES_MIGRATIONS, moduleUrl, sessionCallable: GATEWAY_RULES_SESSION_OPS })
   if (registered.kind !== "ok") throw new Error(JSON.stringify(registered))
   const pi = new FakeExtensionAPI()
   pi.cwd = workspace
@@ -35,6 +36,12 @@ export async function scopeFixture(options: { relativeMemoryHome?: boolean } = {
   }).register(pi, { logger, config: { getFlag: () => undefined } })
   const call = async <T>(op: string, args: unknown): Promise<T> => {
     const result = await store.extensionCall<T>(GATEWAY_RULES_EXTENSION_NAME, op, args)
+    if (result.kind !== "ok") throw new Error(`${op}: ${JSON.stringify(result)}`)
+    return result.value
+  }
+  /** An internal op as `session`'s own component runs it: the store stamps the caller. */
+  const callAs = async <T>(session: string, op: string, args: unknown = {}): Promise<T> => {
+    const result = await store.extensionSessionAwait<T>(GATEWAY_RULES_EXTENSION_NAME, op, args, { callerDurableId: session })
     if (result.kind !== "ok") throw new Error(`${op}: ${JSON.stringify(result)}`)
     return result.value
   }
@@ -62,7 +69,7 @@ export async function scopeFixture(options: { relativeMemoryHome?: boolean } = {
     return new GitMemoryRepo({ dir: resolved.paths.repo, agentId: resolved.id })
   }
   return {
-    root, env, workspace, store, pi, call, members, context, learn, prompt, repo,
+    root, env, workspace, store, pi, call, callAs, members, context, learn, prompt, repo,
     async dispose() { await harness.dispose(); rmSync(root, { recursive: true, force: true }) },
   }
 }

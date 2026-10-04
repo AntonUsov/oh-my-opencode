@@ -44,7 +44,7 @@ export function createScopeMemoryPromptHandler(access: GatewayScopeAccess) {
       }
     }
     const digest = member.role === "lead"
-      ? await access.call<{ readonly entries: readonly DigestEntry[] }>("digestForSession", { session_durable_id: sessionId })
+      ? await access.callAs<{ readonly entries: readonly DigestEntry[] }>(sessionId, "digestForSession", {})
       : { entries: [] }
     const header = `<scope-memory scope="${escapeRuleText(member.scope).replaceAll('"', "&quot;")}">\n`
       + `<projection>${escapeRuleText(identity.paths.repo)}</projection>\n`
@@ -65,7 +65,7 @@ export function createScopeMemoryPromptHandler(access: GatewayScopeAccess) {
     const block = header + prefix + "\n" + selected.join("\n") + footer
     const base = prompt.replace(REGION, "").trimEnd()
     if (lastSeq !== undefined && Reflect.get(payload, "preview") !== true) {
-      await access.call("digestDelivered", { session_durable_id: sessionId, scope: member.scope, version: member.version, last_seq: lastSeq })
+      await access.callAs(sessionId, "digestDelivered", { scope: member.scope, version: member.version, last_seq: lastSeq })
     }
     return { systemPrompt: `${base}\n\n${BEGIN}\n${block}\n${END}` }
   }

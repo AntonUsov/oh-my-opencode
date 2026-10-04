@@ -9,7 +9,8 @@ import { resolveScopeMemoryIdentity } from "./scope-identity"
 export interface GatewayScopeAccess {
   readonly member: (sessionId: string) => Promise<ScopeMember | null>
   readonly identity: (member: ScopeMember, cwd: string) => ReturnType<typeof resolveScopeMemoryIdentity> | undefined
-  readonly call: <T>(op: string, args: unknown) => Promise<T>
+  /** An internal gateway_rules op run AS `sessionId`: the store stamps it as the caller. */
+  readonly callAs: <T>(sessionId: string, op: string, args: unknown) => Promise<T>
   readonly memoryHome: (cwd: string) => string
 }
 
@@ -18,19 +19,19 @@ export function createGatewayScopeAccess(
   env: Record<string, string | undefined> = process.env,
 ): GatewayScopeAccess {
   const memoryHome = resolveMemoryRoot(env, resolveAgentHome({ env }))
-  const call = async <T>(op: string, args: unknown): Promise<T> => {
+  const callAs = async <T>(sessionId: string, op: string, args: unknown): Promise<T> => {
     const store = await ensureStore()
     if (store === undefined) throw new Error("gateway scope store is unavailable")
-    const result = await store.extensionCall<T>(GATEWAY_RULES_EXTENSION_NAME, op, args)
+    const result = await store.extensionSessionAwait<T>(GATEWAY_RULES_EXTENSION_NAME, op, args, { callerDurableId: sessionId })
     if (result.kind !== "ok") throw new Error(`gateway scope operation refused: ${result.message}`)
     return result.value
   }
   return {
-    call,
+    callAs,
     member: async (sessionId) => {
       const store = await ensureStore()
       if (store === undefined) return null
-      return call<ScopeMember | null>("memberForSession", { session_durable_id: sessionId })
+      return callAs<ScopeMember | null>(sessionId, "memberForSession", {})
     },
     identity: (member, cwd) => member.memory_identity === null
       ? undefined
