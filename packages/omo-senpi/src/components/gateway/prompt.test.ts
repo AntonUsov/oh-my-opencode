@@ -7,6 +7,7 @@ import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 import type { ComponentContext } from "../../extension/types"
+import { FakeExtensionAPI } from "../../../test-support/fake-extension-api"
 import { createGatewayHarness, type GatewayHarness } from "../thread/gateway/testing/harness"
 import type { GatewayStore } from "../thread/gateway/store"
 import { createGatewayComponent } from "./index"
@@ -39,9 +40,9 @@ const sessionCtx = (id: string) => ({ sessionManager: { getSessionId: () => id }
 const silentCtx = { logger: { info() {}, warn() {}, error() {} }, config: { getFlag: () => undefined } } as unknown as ComponentContext
 
 function componentHandler(component: ReturnType<typeof createGatewayComponent>) {
-  const handlers = new Map<string, (payload: unknown, eventCtx?: unknown) => unknown>()
-  component.register({ on: (name: string, handler: never) => { handlers.set(name, handler); return () => undefined } } as never, silentCtx)
-  const handler = handlers.get("before_agent_start")
+  const pi = new FakeExtensionAPI()
+  component.register(pi, silentCtx)
+  const handler = pi.handlers.find((entry) => entry.event === "before_agent_start")?.handler
   if (handler === undefined) throw new Error("the gateway component registers no before_agent_start handler")
   return handler as (payload: unknown, eventCtx?: unknown) => Promise<{ readonly systemPrompt: string } | undefined>
 }

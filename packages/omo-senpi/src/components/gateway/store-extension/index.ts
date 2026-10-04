@@ -1,6 +1,9 @@
 import type { StoreExtensionTransaction } from "../../thread/gateway/store-extensions"
 import { escapeRuleText, renderOperatingRulesBlock } from "../rules-block"
 
+export { memberForSession, scopeMembersCommitted, scopeMembersVersion } from "./scope-members"
+export { digestDelivered, digestForSession, learningCommitted } from "./learnings"
+
 type RulesCommittedTarget = {
   readonly session_durable_id: string
   readonly binding_id: string | undefined
