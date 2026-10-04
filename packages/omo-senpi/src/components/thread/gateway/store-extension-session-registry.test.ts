@@ -1,11 +1,9 @@
 import { afterEach, expect, test } from "bun:test"
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import type { Worker } from "node:worker_threads"
 
-import { createGatewayRelay } from "./relay"
 import { gatewayDatabasePath } from "./paths"
-import type { GatewayStore } from "./store"
 import type { SessionCallableOp, StoreExtensionRegistration } from "./store-extensions"
 import { createGatewayHarness, type GatewayHarness } from "./testing/harness"
 
@@ -38,9 +36,6 @@ const statusOp: SessionCallableOp = {
 const registration = (overrides: Partial<StoreExtensionRegistration> = {}): StoreExtensionRegistration => ({
   name: "gw", moduleUrl, migrations, wakeDir: "thread-open", sessionCallable: [openOp, statusOp], ...overrides,
 })
-const bindTo = (store: GatewayStore, h: GatewayHarness, session: string, chat: string) =>
-  createGatewayRelay({ store, engine: h.engineFor(store), endpoints: { wake: async () => ({ admitted: [] }) }, locate: async () => null, now: () => h.clock.now })
-    .bind({ principal: `session:${session}`, binding: { platform: "custom", account_id: "qa", chat_id: chat, thread_id: "t1", session_durable_id: session } })
 
 test.each<[string, Partial<SessionCallableOp>]>([
   ["an op the module does not export", { op: "missingOp" }],

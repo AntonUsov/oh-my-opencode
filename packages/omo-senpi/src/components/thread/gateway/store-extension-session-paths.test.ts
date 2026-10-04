@@ -2,7 +2,6 @@ import { afterEach, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import type { Worker } from "node:worker_threads"
 
 import { createGatewayRelay } from "./relay"
 import { gatewayDatabasePath } from "./paths"
