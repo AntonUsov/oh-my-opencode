@@ -44,6 +44,8 @@ export type StoreExtensionRefusalCode =
   | "extension_operation_failed"
   | "gateway_lock_wait_exceeded"
   | "gateway_schema_too_new"
+  /** An await ended without a final status (expiring it, or the status read after, was refused): the request may still complete. */
+  | "await_unresolved"
 
 export type StoreExtensionRefusal = {
   readonly kind: "refused"

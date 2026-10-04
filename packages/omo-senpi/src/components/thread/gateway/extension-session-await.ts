@@ -11,20 +11,40 @@ export type SessionAwait = {
   readonly expire: () => Promise<StoreExtensionResult<unknown>>
 }
 
-/** A status is final unless it says `pending`; a refused status call is final too. */
-function settled(result: StoreExtensionResult<unknown>): boolean {
-  if (result.kind !== "ok") return true
+/** Only a status the op itself reports as not `pending` is final; a refused status call never is. */
+function final(result: StoreExtensionResult<unknown>): boolean {
+  if (result.kind !== "ok") return false
   const value = result.value
   return !(typeof value === "object" && value !== null && (value as { readonly status?: unknown }).status === "pending")
+}
+
+function unresolved(id: string, why: string): StoreExtensionResult<unknown> {
+  return {
+    kind: "refused",
+    code: "await_unresolved",
+    message: `The request ${id} has no final status: ${why}. It may still complete; read its status again before retrying, so a retry does not repeat it.`,
+  }
+}
+
+/** The deadline: `expire`, then one final `status`. Anything but a final status is `await_unresolved`, never a plain failure. */
+async function expireAndRead(request: SessionAwait): Promise<StoreExtensionResult<unknown>> {
+  const id = basename(request.file)
+  const expired = await request.expire()
+  if (expired.kind !== "ok") return unresolved(id, `expiring it was refused (${expired.code}: ${expired.message})`)
+  const last = await request.status()
+  if (final(last)) return last
+  return unresolved(id, last.kind === "ok" ? "its status still reads pending after it was expired" : `its status after expiry was refused (${last.code}: ${last.message})`)
 }
 
 /**
  * Waits for a session op's await without polling. The watch on the wake file and its directory is
  * armed FIRST, then `status` runs once (a completion that landed before the watch is caught here),
- * then every wake re-checks `status`. At `timeoutMs`, `expire` runs and then `status` once more, so an
- * open that completes during the expiry still returns as opened. A missing wake directory means no
- * connector has started, so nothing can complete the request: it expires at once instead of making
- * the caller wait `timeoutMs`. A dropped event costs at most `timeoutMs`, never correctness.
+ * then every wake re-checks `status`. Only a final status ends the wait: a refused status call (the
+ * lock held past its bound, a failed import) keeps waiting. At `timeoutMs`, `expire` runs and then
+ * `status` once more, so an open that completes during the expiry still returns as opened. A missing
+ * wake directory means no connector has started, so nothing can complete the request: it expires at
+ * once instead of making the caller wait `timeoutMs`. A dropped event costs at most `timeoutMs`,
+ * never correctness.
  */
 export async function awaitSessionRequest(request: SessionAwait): Promise<StoreExtensionResult<unknown>> {
   let woken = false
@@ -35,9 +55,7 @@ export async function awaitSessionRequest(request: SessionAwait): Promise<StoreE
   }
   if (!existsSync(dirname(request.file))) {
     const current = await request.status()
-    if (settled(current)) return current
-    await request.expire()
-    return await request.status()
+    return final(current) ? current : await expireAndRead(request)
   }
   const name = basename(request.file)
   const watchers: FSWatcher[] = []
@@ -57,7 +75,7 @@ export async function awaitSessionRequest(request: SessionAwait): Promise<StoreE
     for (;;) {
       woken = false
       const current = await request.status()
-      if (settled(current)) return current
+      if (final(current)) return current
       const remaining = deadline - Date.now()
       if (remaining <= 0) break
       if (woken) continue
@@ -71,8 +89,7 @@ export async function awaitSessionRequest(request: SessionAwait): Promise<StoreE
       wake = undefined
       if (!arrived) break
     }
-    await request.expire()
-    return await request.status()
+    return await expireAndRead(request)
   } finally {
     for (const watcher of watchers) watcher.close()
   }
