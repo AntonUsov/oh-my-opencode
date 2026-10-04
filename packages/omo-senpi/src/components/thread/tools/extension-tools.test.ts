@@ -90,7 +90,7 @@ function sessionStartHost(preRegistered: Readonly<Record<string, Record<string, 
     registerTool(tool: Record<string, unknown>) {
       tools.set(String(tool.name), tool)
       const awaited = waiting
-      if (awaited?.name === tool.name) awaited.done()
+      if (awaited !== undefined && awaited.name === tool.name) awaited.done()
     },
     getAllTools: () => [...tools.keys()].map((name) => ({ name })),
     on(event: string, handler: () => void) { if (event === "session_start") handlers.push(handler) },
@@ -184,7 +184,9 @@ test("#given a declaration whose module records every import #when a fresh proce
   registerExtensionTools(host, { ...options, store: storeAt(agentDir) }, () => undefined)
   await host.start("ext_gw_open")
   expect(importCount()).toBe(1)
-  const tool = host.tools.get("ext_gw_open") as AnyTool
+  const registered = host.tools.get("ext_gw_open")
+  if (registered === undefined) throw new Error("ext_gw_open was not registered at session_start")
+  const tool = registered as unknown as AnyTool
   expect(resultOf(await tool.execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("dur-caller") as never))).toMatchObject({ kind: "ok" })
   expect(importCount()).toBe(2)
 }, 10_000)
