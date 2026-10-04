@@ -29,6 +29,8 @@ describe("store extension migrations", () => {
     const db = new Database(gatewayDatabasePath(h.agentDir))
     try {
       db.exec("DROP TABLE session_models")
+      db.exec("DROP TABLE thread_creations")
+      db.exec("DROP TABLE extension_registrations")
       db.exec("DELETE FROM extension_objects WHERE owner IS NULL AND name NOT IN (SELECT name FROM sqlite_schema)")
       db.exec("PRAGMA user_version = 6")
     } finally {

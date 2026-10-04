@@ -2,15 +2,41 @@ import type { BindingRecord } from "./bindings"
 import type { GatewayRelay } from "./relay"
 import type { SqlRow, SqlValue } from "./sql"
 
+/**
+ * One extension op a session may call through its own named tool (`toolName`). The store worker
+ * stamps the engine-resolved caller into the op's args (`caller_session_durable_id`, plus
+ * `caller_created_target: true` when the caller thread_create'd `args[targetArg]`); the public
+ * `extensionCall` refuses the op, its `statusOp` and its `expireOp` with `caller_not_allowed`.
+ */
+export type SessionCallableOp = {
+  readonly op: string
+  /** `^[a-z][a-z0-9_]{2,63}$`, never in the `thread_` family. */
+  readonly toolName: string
+  readonly description: string
+  /** A plain draft-07 JSON Schema with an object root and `additionalProperties: false`. */
+  readonly parameters: Readonly<Record<string, unknown>>
+  /** The args field naming the target session's durable id; it must be a key of `parameters.properties`. */
+  readonly targetArg?: string
+  /** When the op's result carries `await_request_id`, the tool waits on `<wakeDir>/<await_request_id>`. */
+  readonly await?: { readonly statusOp: string; readonly expireOp: string; readonly timeoutMs: number }
+  /** A file in `wakeDir` touched (temp + rename) after a committed successful call. */
+  readonly wake?: string
+}
+
 export type StoreExtensionRegistration = {
   readonly name: string
   readonly migrations: readonly (readonly string[])[]
   /** Absolute file URL of compiled JavaScript, imported by the store worker. */
   readonly moduleUrl: string
+  readonly sessionCallable?: readonly SessionCallableOp[]
+  /** One path segment under the gateway store's directory holding the await and wake files; the connector creates it. */
+  readonly wakeDir?: string
 }
 
 export type StoreExtensionRefusalCode =
   | "invalid_arguments"
+  | "caller_not_allowed"
+  | "caller_context_missing"
   | "extension_import_failed"
   | "extension_unknown_op"
   | "extension_unknown_name"
@@ -44,6 +70,8 @@ export type StoreExtensionTransaction = {
     readonly chat_id: string
     readonly thread_id: string
   }) => Promise<BindingRecord | null>
+  /** The session's active bindings (not expired at the transaction's now), ordered by binding_id; a read in the op's own transaction. */
+  readonly bindingsForSession: (sessionDurableId: string) => Promise<readonly BindingRecord[]>
   readonly outboxPending: GatewayRelay["outbox"]
 }
 
@@ -53,4 +81,22 @@ export type StoreExtensionOperation = (tx: StoreExtensionTransaction, args: unkn
 export type StoreExtensionApi = {
   readonly registerStoreExtension: (extension: StoreExtensionRegistration) => Promise<StoreExtensionResult<{ readonly version: number }>>
   readonly extensionCall: <T = unknown>(name: string, op: string, args: unknown) => Promise<StoreExtensionResult<T>>
+}
+
+/** A declared session op as every process lists it from the store (`extension_registrations`). */
+export type DeclaredSessionOp = SessionCallableOp & { readonly extension: string }
+
+/** The engine-resolved caller a session call runs as; never taken from the op's arguments. */
+export type SessionCaller = { readonly callerDurableId: string }
+
+/**
+ * The session channel: reachable only from the session's own extension tools (never the SDK), so
+ * the caller a session-callable op sees is always the one the engine resolved.
+ */
+export type StoreExtensionSessionApi = {
+  /** Every session op declared in the store; a read that imports no module. */
+  readonly sessionCallableOps: () => Promise<readonly DeclaredSessionOp[]>
+  readonly extensionSessionCall: <T = unknown>(name: string, op: string, args: unknown, caller: SessionCaller) => Promise<StoreExtensionResult<T>>
+  /** `extensionSessionCall`, then the declared `await` when the result carries `await_request_id`. */
+  readonly extensionSessionAwait: <T = unknown>(name: string, op: string, args: unknown, caller: SessionCaller) => Promise<StoreExtensionResult<T>>
 }

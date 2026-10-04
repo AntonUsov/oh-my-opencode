@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test"
 
 import { createGatewayHarness, type GatewayHarness } from "./testing/harness"
 import type { StoreExtensionRegistration } from "./store-extensions"
+import { UNKNOWN_CALLER } from "../tools/ports"
 
 let harness: GatewayHarness | undefined
 afterEach(async () => { await harness?.dispose(); harness = undefined })
@@ -80,7 +81,7 @@ test("#given no engine caller #when the session channel is called #then it is re
   const h = (harness = createGatewayHarness())
   const store = h.store()
   await store.registerStoreExtension(registration())
-  for (const callerDurableId of ["", "UNKNOWN_CALLER"]) {
+  for (const callerDurableId of ["", UNKNOWN_CALLER]) {
     expect(await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId })).toMatchObject({ kind: "refused", code: "caller_context_missing" })
   }
 })

@@ -79,6 +79,15 @@ test("#given a declaration persisted by one process #when a second process calls
   expect(result).toMatchObject({ kind: "ok", value: { opened: true } })
 })
 
+test("#given an extension registered only by another process #when this process makes a PUBLIC extensionCall to one of its ordinary ops #then its worker imports the module from the persisted row and runs the op", async () => {
+  const h = (harness = createGatewayHarness())
+  await h.store().registerStoreExtension(registration())
+  const connector = h.store()
+  const id = "tor_" + "9".repeat(32)
+  expect(await connector.extensionCall("gw", "completeThreadOpen", { await_request_id: id })).toMatchObject({ kind: "ok", value: { completed: true } })
+  expect(await connector.extensionCall("gw", "openThread", { target_session_durable_id: "child" })).toMatchObject({ kind: "refused", code: "caller_not_allowed" })
+})
+
 test("#given a persisted moduleUrl that no longer exists #when a session lists ops and then calls one #then listing works without importing, and the call alone answers extension_import_failed", async () => {
   const h = (harness = createGatewayHarness())
   const gone = join(h.agentDir, "gone-extension.mjs")
