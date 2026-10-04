@@ -105,7 +105,7 @@ test("#given a declaration persisted by one process #when a second process calls
   const h = (harness = createGatewayHarness())
   await h.store().registerStoreExtension(registration())
   const second = h.store()
-  const result = await second.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
+  const result = await second.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
   expect(result).toMatchObject({ kind: "ok", value: { opened: true } })
 })
 
@@ -126,9 +126,9 @@ test("#given a persisted moduleUrl that no longer exists #when a session lists o
   Bun.spawnSync(["rm", "-f", gone])
   const session = h.store()
   expect((await session.sessionCallableOps()).map((entry) => entry.registeredName).sort()).toEqual(["ext_gw_open", "ext_gw_work_item_status"])
-  expect(await session.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused", code: "extension_import_failed" })
+  expect(await session.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused", code: "extension_import_failed" })
   writeFileSync(gone, (await Bun.file(new URL(moduleUrl)).text()))
-  expect(await session.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok" })
+  expect(await session.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok" })
 })
 
 test("#given a persisted moduleUrl that is not a file .js/.mjs/.cjs URL #when the session channel would load it #then it is refused", async () => {
@@ -136,7 +136,7 @@ test("#given a persisted moduleUrl that is not a file .js/.mjs/.cjs URL #when th
   await h.store().registerStoreExtension(registration())
   const db = new (await import("bun:sqlite")).Database(gatewayDatabasePath(h.agentDir))
   try { db.query("UPDATE extension_registrations SET descriptor_json = json_set(descriptor_json, '$.moduleUrl', 'https://example.invalid/x.mjs') WHERE name = 'gw'").run() } finally { db.close() }
-  expect(await h.store().extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused" })
+  expect(await h.store().extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused" })
 })
 
 test("#given the same extension registered again from a second location #when listing #then exactly one descriptor exists and the new module is called", async () => {
@@ -148,7 +148,7 @@ test("#given the same extension registered again from a second location #when li
   await h.store().registerStoreExtension(registration({ moduleUrl: `file://${relocated}` }))
   const later = h.store()
   expect(await later.sessionCallableOps()).toHaveLength(2)
-  expect(await later.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok", value: { relocated: true } })
+  expect(await later.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok", value: { relocated: true } })
 })
 
 test("#given no extension declarations #when a session lists ops #then the answer is empty and no extension module is imported", async () => {
@@ -161,9 +161,9 @@ test("#given a session bound with the core bind #when an op reads bindingsForSes
   const store = h.store()
   await store.registerStoreExtension(registration())
   expect(await bindTo(store, h, "bound", "chat-a")).toMatchObject({ kind: "ok" })
-  const bound = await store.extensionSessionCall("gw", "workItemStatus", { status: "working" }, { callerDurableId: "bound" })
+  const bound = await store.extensionSessionAwait("gw", "workItemStatus", { status: "working" }, { callerDurableId: "bound" })
   expect(bound).toMatchObject({ kind: "ok", value: { updated: true } })
-  expect(await store.extensionSessionCall("gw", "workItemStatus", { status: "working" }, { callerDurableId: "loose" })).toMatchObject({ kind: "ok", value: { updated: false, reason: "no_binding" } })
+  expect(await store.extensionSessionAwait("gw", "workItemStatus", { status: "working" }, { callerDurableId: "loose" })).toMatchObject({ kind: "ok", value: { updated: false, reason: "no_binding" } })
 })
 
 test("#given a binding that expired #when bindingsForSession runs #then it is not returned", async () => {
@@ -172,7 +172,7 @@ test("#given a binding that expired #when bindingsForSession runs #then it is no
   await store.registerStoreExtension(registration())
   await bindTo(store, h, "bound", "chat-a")
   h.clock.now += 400 * 24 * 60 * 60 * 1000
-  expect(await store.extensionSessionCall("gw", "workItemStatus", { status: "working" }, { callerDurableId: "bound" })).toMatchObject({ kind: "ok", value: { updated: false, reason: "no_binding" } })
+  expect(await store.extensionSessionAwait("gw", "workItemStatus", { status: "working" }, { callerDurableId: "bound" })).toMatchObject({ kind: "ok", value: { updated: false, reason: "no_binding" } })
 })
 
 test("#given a worker bound to item A #when it names item B whose lead is another session #then the op refuses it, because the caller it sees is the engine's and cannot be the lead's", async () => {
@@ -181,11 +181,11 @@ test("#given a worker bound to item A #when it names item B whose lead is anothe
   await store.registerStoreExtension(registration())
   await bindTo(store, h, "worker-a", "chat-a")
   await store.extensionCall("gw", "sql", { sql: "INSERT INTO gw_leads (item, lead) VALUES ('item-b', 'lead-b')" })
-  const named = await store.extensionSessionCall("gw", "workItemStatus", { status: "done", work_item_id: "item-b" }, { callerDurableId: "worker-a" })
+  const named = await store.extensionSessionAwait("gw", "workItemStatus", { status: "done", work_item_id: "item-b" }, { callerDurableId: "worker-a" })
   expect(named).toMatchObject({ kind: "ok", value: { updated: false, reason: "not_item_lead" } })
-  const asLead = await store.extensionSessionCall("gw", "workItemStatus", { status: "done", work_item_id: "item-b", caller_session_durable_id: "lead-b" }, { callerDurableId: "worker-a" })
+  const asLead = await store.extensionSessionAwait("gw", "workItemStatus", { status: "done", work_item_id: "item-b", caller_session_durable_id: "lead-b" }, { callerDurableId: "worker-a" })
   expect(asLead).toMatchObject({ kind: "refused", code: "invalid_arguments" })
-  const own = await store.extensionSessionCall("gw", "workItemStatus", { status: "done" }, { callerDurableId: "worker-a" })
+  const own = await store.extensionSessionAwait("gw", "workItemStatus", { status: "done" }, { callerDurableId: "worker-a" })
   expect(own).toMatchObject({ kind: "ok", value: { updated: true } })
   expect((own as { value: { binding_id: string } }).value.binding_id).not.toBe("item-b")
 })
@@ -195,7 +195,7 @@ test("#given the item's lead #when it names that item #then the op accepts it", 
   const store = h.store()
   await store.registerStoreExtension(registration())
   await store.extensionCall("gw", "sql", { sql: "INSERT INTO gw_leads (item, lead) VALUES ('item-b', 'lead-b')" })
-  expect(await store.extensionSessionCall("gw", "workItemStatus", { status: "failed", work_item_id: "item-b" }, { callerDurableId: "lead-b" })).toMatchObject({ kind: "ok", value: { updated: true, binding_id: "item-b" } })
+  expect(await store.extensionSessionAwait("gw", "workItemStatus", { status: "failed", work_item_id: "item-b" }, { callerDurableId: "lead-b" })).toMatchObject({ kind: "ok", value: { updated: true, binding_id: "item-b" } })
 })
 
 test("#given a declared wake file #when a session call commits #then the marker is touched after the commit; a refused call and a rolled-back call do not touch it", async () => {
@@ -204,11 +204,11 @@ test("#given a declared wake file #when a session call commits #then the marker 
   await store.registerStoreExtension(registration({ sessionCallable: [openOp, { ...statusOp, op: "failAfterWrite", toolName: "fail", wake: "requests.marker" }] }))
   const marker = join(dirname(gatewayDatabasePath(h.agentDir)), "thread-open", "requests.marker")
   mkdirSync(dirname(marker), { recursive: true })
-  expect(await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child", nope: 1 }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused" })
+  expect(await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child", nope: 1 }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused" })
   expect(existsSync(marker)).toBe(false)
-  expect(await store.extensionSessionCall("gw", "failAfterWrite", { status: "working" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused" })
+  expect(await store.extensionSessionAwait("gw", "failAfterWrite", { status: "working" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused" })
   expect(existsSync(marker)).toBe(false)
-  expect(await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok" })
+  expect(await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok" })
   expect(statSync(marker).isFile()).toBe(true)
 })
 

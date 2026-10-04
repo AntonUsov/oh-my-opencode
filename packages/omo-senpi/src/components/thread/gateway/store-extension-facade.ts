@@ -83,7 +83,6 @@ export function createExtensionFacade(deps: FacadeDeps): ExtensionFacade {
     },
     // No store yet means no declarations: answered without opening (and so creating) the store.
     sessionCallableOps: async () => (existsSync(gatewayDatabasePath(deps.agentDir)) ? await call("session_callable_ops") : []),
-    extensionSessionCall: async <T>(name: string, op: string, args: unknown, caller: SessionCaller) => (await sessionRequest(name, op, "op", args, caller)).result as StoreExtensionResult<T>,
     extensionSessionAwait: async <T>(name: string, op: string, args: unknown, caller: SessionCaller) => {
       const reply = await sessionRequest(name, op, "op", args, caller)
       const { result } = reply

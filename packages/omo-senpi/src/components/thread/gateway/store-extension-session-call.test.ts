@@ -57,7 +57,7 @@ test.each([
   const h = (harness = createGatewayHarness())
   const store = h.store()
   await store.registerStoreExtension(registration())
-  const result = await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child", ...forged }, { callerDurableId: "caller" })
+  const result = await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child", ...forged }, { callerDurableId: "caller" })
   expect(result).toMatchObject({ kind: "refused", code: "invalid_arguments" })
   expect(await store.extensionCall("gw", "completeThreadOpen", { await_request_id: "tor_" + "b".repeat(32) })).toMatchObject({ kind: "ok" })
 })
@@ -69,7 +69,7 @@ test("#given an env var naming another caller #when the session channel is calle
   const previous = process.env.OMO_GATEWAY_CALLER_SESSION
   process.env.OMO_GATEWAY_CALLER_SESSION = "lead-session"
   try {
-    const result = await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
+    const result = await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
     expect(opened(result).caller_session_durable_id).toBe("caller")
   } finally {
     if (previous === undefined) delete process.env.OMO_GATEWAY_CALLER_SESSION
@@ -82,7 +82,7 @@ test("#given no engine caller #when the session channel is called #then it is re
   const store = h.store()
   await store.registerStoreExtension(registration())
   for (const callerDurableId of ["", UNKNOWN_CALLER]) {
-    expect(await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId })).toMatchObject({ kind: "refused", code: "caller_context_missing" })
+    expect(await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId })).toMatchObject({ kind: "refused", code: "caller_context_missing" })
   }
 })
 
@@ -90,7 +90,7 @@ test("#given an op the extension did not declare session-callable #when the sess
   const h = (harness = createGatewayHarness())
   const store = h.store()
   await store.registerStoreExtension(registration())
-  expect(await store.extensionSessionCall("gw", "completeThreadOpen", { await_request_id: "tor_" + "c".repeat(32) }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused", code: "extension_unknown_op" })
+  expect(await store.extensionSessionAwait("gw", "completeThreadOpen", { await_request_id: "tor_" + "c".repeat(32) }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused", code: "extension_unknown_op" })
 })
 
 test("#given a child the caller created with thread_create #when the caller opens a thread for it #then caller_created_target is stamped true", async () => {
@@ -98,7 +98,7 @@ test("#given a child the caller created with thread_create #when the caller open
   const store = h.store()
   await store.registerStoreExtension(registration())
   await store.recordThreadCreation({ creator_durable_id: "caller", created_durable_id: "child" })
-  const result = await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
+  const result = await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
   expect(opened(result)).toMatchObject({ caller_session_durable_id: "caller", caller_created_target: true })
 })
 
@@ -110,7 +110,7 @@ test.each([
   const store = h.store()
   await store.registerStoreExtension(registration())
   if (creator !== undefined) await store.recordThreadCreation({ creator_durable_id: creator, created_durable_id: "target" })
-  const result = await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "target" }, { callerDurableId: "caller" })
+  const result = await store.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "target" }, { callerDurableId: "caller" })
   expect(opened(result).caller_session_durable_id).toBe("caller")
   expect(Object.hasOwn(opened(result), "caller_created_target")).toBe(false)
 })
@@ -122,6 +122,6 @@ test("#given a recorded creation #when the store reopens (host restart) #then th
   await first.recordThreadCreation({ creator_durable_id: "caller", created_durable_id: "child" })
   await first.dispose()
   const second = h.store()
-  const result = await second.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
+  const result = await second.extensionSessionAwait("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
   expect(opened(result).caller_created_target).toBe(true)
 })

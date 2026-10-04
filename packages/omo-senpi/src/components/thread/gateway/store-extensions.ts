@@ -102,7 +102,6 @@ export type SessionCaller = { readonly callerDurableId: string }
 export type StoreExtensionSessionApi = {
   /** Every session op declared in the store; a read that imports no module. */
   readonly sessionCallableOps: () => Promise<readonly DeclaredSessionOp[]>
-  readonly extensionSessionCall: <T = unknown>(name: string, op: string, args: unknown, caller: SessionCaller) => Promise<StoreExtensionResult<T>>
-  /** `extensionSessionCall`, then the declared `await` when the result carries `await_request_id`. */
+  /** Runs a declared op as `caller`, then its declared `await` when the result carries `await_request_id`; otherwise the op's own result. */
   readonly extensionSessionAwait: <T = unknown>(name: string, op: string, args: unknown, caller: SessionCaller) => Promise<StoreExtensionResult<T>>
 }
