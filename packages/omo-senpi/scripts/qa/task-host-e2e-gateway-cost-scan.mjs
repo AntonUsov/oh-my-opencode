@@ -85,7 +85,7 @@ export function processTree(pid) {
 }
 
 /** One process's physical footprint in MB (darwin `vmmap --summary`, linux `smaps_rollup` Pss), as the shard-cost driver reads it. */
-function footprintMb(pid) {
+export function footprintMb(pid) {
   try {
     if (process.platform === "darwin") {
       const text = execFileSync("vmmap", ["--summary", String(pid)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 16 * 1024 * 1024 })

@@ -4,8 +4,9 @@
  * the gateway answers.
  *
  * Sections (each in `task-host-e2e-gateway-cost-<section>.mjs`):
- * - `ab`: (a) TUI startup and (b) idle memory, engine commit A/B through the same omo launcher and
- *   plugin, interleaved pairs, p95 and min-of-N (`-ab.mjs`);
+ * - `ab`: (a) TUI startup and (b) idle memory, listener OFF vs ON on ONE engine and launcher: plugin A
+ *   is a scratch build whose thread component gets `sessionControl: null`, plugin B the plugin as
+ *   built; interleaved pairs, min-of-N, median and p95 with bootstrap intervals (`-ab.mjs`, `-probe.mjs`);
  * - `gateway`: on the released engine (`THREAD_QA_SENPI_VERSION`, default 2026.10.8), (c)
  *   `thread_list` at N = 1, 5, 12 pty TUIs and (d) `thread_send` to an idle terminal, timed at the
  *   tool boundary (`-gateway.mjs`, `-list.mjs`, `-send.mjs`, `-trace.mjs`);
@@ -15,9 +16,11 @@
  * is discarded, listed and re-taken (`-batch.mjs`). Past `--deadline-at` (or `--max-run-ms`) every
  * section stops between samples and the report says exactly what was measured.
  *
- * Usage: bun task-host-e2e-gateway-cost.mjs --engine-a <senpi coding-agent dir> --engine-b <dir>
- *        [--label-b <text>] [--samples 20] [--list-samples 20] [--send-cycles 10] [--cli-samples 10]
- *        [--idle-ms 5000] [--batch-size 5] [--list-ns 1,5,12] [--skip ab|gateway|control]...
+ * Usage: bun task-host-e2e-gateway-cost.mjs --engine-a <senpi engine dir> [--engine-b <dir>]
+ *        [--plugin-a <omo-senpi plugin dir>] [--plugin-b <dir>] [--endpoints-a 0] [--endpoints-b 1]
+ *        [--label-a <text>] [--label-b <text>] [--samples 20] [--list-samples 20] [--send-cycles 10]
+ *        [--cli-samples 10] [--idle-ms 1000] [--echo-window-ms 2000] [--batch-size 5]
+ *        [--list-ns 1,5,12] [--skip ab|gateway|control]...
  *        [--deadline-at <epoch ms>|--max-run-ms <ms>] [--out <dir>]
  * Exit 0 every bound PASS, 2 measured but a bound FAIL or PARTIAL, 1 a harness failure or leftover.
  * Never touches the real agent dir: every TUI runs with its own HOME and agent dir under /tmp.
@@ -34,13 +37,19 @@ const opt = (name, fallback) => {
 const startedAt = Date.now()
 const opts = {
   engineA: opt("engine-a"),
-  engineB: opt("engine-b"),
+  engineB: opt("engine-b", opt("engine-a")),
+  pluginA: opt("plugin-a"),
+  pluginB: opt("plugin-b"),
+  endpointsA: Number(opt("endpoints-a", 0)),
+  endpointsB: Number(opt("endpoints-b", 1)),
+  labelA: opt("label-a", "A"),
   labelB: opt("label-b", "B"),
+  echoWindowMs: Number(opt("echo-window-ms", 2000)),
   samples: Number(opt("samples", 20)),
   listSamples: Number(opt("list-samples", 20)),
   sendCycles: Number(opt("send-cycles", 10)),
   cliSamples: Number(opt("cli-samples", 10)),
-  idleMs: Number(opt("idle-ms", 5000)),
+  idleMs: Number(opt("idle-ms", 1000)),
   batchSize: Number(opt("batch-size", 5)),
   listNs: String(opt("list-ns", "1,5,12")).split(",").map(Number),
   skips: argv.flatMap((value, index) => (argv[index - 1] === "--skip" ? [value] : [])),
@@ -66,7 +75,7 @@ const report = {
   hardware: `${process.platform}/${process.arch} ${cpus().length}-core ${Math.round(totalmem() / 1024 ** 3)} GB`,
   node: Bun.spawnSync([process.env.THREAD_QA_NODE ?? "node", "--version"]).stdout.toString().trim(),
   bun: Bun.version,
-  options: { ...opts, engineA: undefined, engineB: undefined },
+  options: { ...opts, engineA: undefined, engineB: undefined, pluginA: undefined, pluginB: undefined },
   host_load_start: hostLoad(),
   sections: {},
   errors: {},
