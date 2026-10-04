@@ -97,8 +97,11 @@ test("#given two extensions whose composed tool names are equal (ab + cc_dd, ab_
   const h = (harness = createGatewayHarness())
   const store = h.store()
   expect(await store.registerStoreExtension(registration({ name: "ab", migrations: [], sessionCallable: [{ ...statusOp, toolName: "cc_dd" }] }))).toMatchObject({ kind: "ok" })
-  expect(await store.registerStoreExtension(registration({ name: "ab_cc", migrations: [], sessionCallable: [{ ...statusOp, toolName: "dd" }] }))).toMatchObject({ kind: "refused", code: "invalid_arguments" })
+  expect(await store.registerStoreExtension(registration({ name: "ab_cc", migrations: [["CREATE TABLE ab_cc_rows (id INTEGER PRIMARY KEY)"]], sessionCallable: [{ ...statusOp, toolName: "dd" }] }))).toMatchObject({ kind: "refused", code: "invalid_arguments" })
   expect((await h.store().sessionCallableOps()).map((entry) => [entry.extension, entry.registeredName])).toEqual([["ab", "ext_ab_cc_dd"]])
+  // Refused before its migrations ran: the schema is untouched.
+  const db = new (await import("bun:sqlite")).Database(gatewayDatabasePath(h.agentDir), { readonly: true })
+  try { expect(db.query("SELECT name FROM sqlite_schema WHERE name = 'ab_cc_rows'").all()).toEqual([]) } finally { db.close() }
 })
 
 test("#given two declared ops #when another process lists session ops #then it sees exactly both, and each is refused on the public channel", async () => {
