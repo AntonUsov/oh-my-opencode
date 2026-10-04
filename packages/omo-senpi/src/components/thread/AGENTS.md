@@ -219,6 +219,21 @@ Every scenario drives the product as a user runs it: the RELEASED senpi (`THREAD
 
 A `DEFECT <scenario>/<check> PD-n` line is a documented behavior the product does not hold yet; it is counted in the run-all summary (`product_defects=`) and never printed as PASS. None is open. PD-1 (a send with no endpoint of the agent dir live answered `host_unavailable`) and PD-2 (a process that never saw an offline or stopped terminal alive answered `not_found`) are fixed; their checks are hard assertions now.
 
+### Measured cost (todo 23, `scripts/qa/task-host-e2e-gateway-cost.mjs`)
+
+All runs were on one quiet 18-core machine: 1-minute load 2.9-6.1 in every batch, 0 batches discarded. Startup and memory are an interleaved engine-commit A/B through the same omo 5.1.17 launcher and plugin. A = senpi `19968d7c4b59` (the parent of the control-endpoint merge) and B = senpi 2026.10.8. Every A sample registered 0 `tui` endpoints and every B sample exactly 1. The gateway rows ran on the released engine with 12 pty TUIs on one agent dir, timed at the tool boundary.
+
+| Bound | Measured (p95; min-of-N) | Verdict |
+| --- | --- | --- |
+| p95 startup delta < 20 ms (20 pairs per run) | Run 1, spawn to prompt: +13.6 ms; min +5.3 ms. Run 2, spawn to keystroke echo: +45.4 ms; min +12.7 ms (paired median +12.5 ms) | FAIL: run 2 is over the bound, so the p95 is not stable at 20 pairs |
+| idle RSS delta < 3 MB (whole-tree physical footprint, 5 s idle, 20 pairs) | Median +10.2 MB; min-of-20 +13.5 MB; paired median +7.5 MB. RSS median +3.5 MB | FAIL |
+| `thread_list` with 12 endpoints < 1.5 s p95 (20 cold + 20 warm) | Cold 298.5 ms (min 243.8 ms); warm 16.5 ms (min 11.9 ms) | PASS |
+| `thread_send` to an idle endpoint < 300 ms p95 (10 cold + 10 warm, tool entry to return) | 24.9 ms (min 13.0 ms); every send `started` | PASS |
+| zero `event loop blocked` lines (84 pty streams, 169 agent-dir files, a live shard host's `stderr.log`; positive control found) | 0 | PASS |
+
+- **A and B are 1483 commits apart.** Against the endpoint merge itself (`0869d2d635c3`, 20 pairs, attribution only), startup p95 is -2.3 ms (min +3.0 ms) and the footprint median is +3.2 MB (min -5.2 MB, paired median +5.4 MB). Per-sample footprints span about 115-165 MB, so 20 pairs cannot resolve a 3 MB bound.
+- **The startup metric does not cover `InteractiveMode.init`.** The prompt and a typed-ahead echo are on screen before `init` reaches `ui.start()`. Neither the scratch patch that binds the listener at that point nor a calibration that adds 50 ms of synchronous work there moved startup: min-of-N was +11.9 ms and +9.9 ms against A, the same as B's +12.7 ms. So the failure QA (the driver flags a > 20 ms regression) is not shown yet. It needs a ready marker that only appears after `init`.
+
 ## Conventions
 
 - Every entry point returns its outcome as data; the error branch carries a taxonomy code and a `next_action` that names the recovery, so a runner hands the failure straight to the model.
