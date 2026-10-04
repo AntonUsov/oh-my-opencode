@@ -13,6 +13,15 @@ export type SessionAwait = {
   readonly onArmed?: () => void
 }
 
+/** A status or expire call that throws (the worker exited mid-call, a reopen hit the lock-wait bound) answers like a refusal, so it never ends the wait early. */
+async function settle(read: () => Promise<StoreExtensionResult<unknown>>): Promise<StoreExtensionResult<unknown>> {
+  try {
+    return await read()
+  } catch (error) {
+    return { kind: "refused", code: "extension_operation_failed", message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 /** Only a status the op itself reports as not `pending` is final; a refused status call never is. */
 function final(result: StoreExtensionResult<unknown>): boolean {
   if (result.kind !== "ok") return false
@@ -31,9 +40,9 @@ function unresolved(id: string, why: string): StoreExtensionResult<unknown> {
 /** The deadline: `expire`, then one final `status`. Anything but a final status is `await_unresolved`, never a plain failure. */
 async function expireAndRead(request: SessionAwait): Promise<StoreExtensionResult<unknown>> {
   const id = basename(request.file)
-  const expired = await request.expire()
+  const expired = await settle(request.expire)
   if (expired.kind !== "ok") return unresolved(id, `expiring it was refused (${expired.code}: ${expired.message})`)
-  const last = await request.status()
+  const last = await settle(request.status)
   if (final(last)) return last
   return unresolved(id, last.kind === "ok" ? "its status still reads pending after it was expired" : `its status after expiry was refused (${last.code}: ${last.message})`)
 }
@@ -56,7 +65,7 @@ export async function awaitSessionRequest(request: SessionAwait): Promise<StoreE
     wake?.()
   }
   if (!existsSync(dirname(request.file))) {
-    const current = await request.status()
+    const current = await settle(request.status)
     return final(current) ? current : await expireAndRead(request)
   }
   const name = basename(request.file)
@@ -77,7 +86,7 @@ export async function awaitSessionRequest(request: SessionAwait): Promise<StoreE
   try {
     for (;;) {
       woken = false
-      const current = await request.status()
+      const current = await settle(request.status)
       if (final(current)) return current
       const remaining = deadline - Date.now()
       if (remaining <= 0) break
