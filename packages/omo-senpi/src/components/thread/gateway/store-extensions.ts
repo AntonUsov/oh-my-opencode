@@ -10,7 +10,7 @@ import type { SqlRow, SqlValue } from "./sql"
  */
 export type SessionCallableOp = {
   readonly op: string
-  /** `^[a-z][a-z0-9_]{2,63}$`, never in the `thread_` family. */
+  /** The short name `^[a-z][a-z0-9_]{1,40}$`; the session's tool is `ext_<extension name>_<toolName>`, at most 64 characters. */
   readonly toolName: string
   readonly description: string
   /** A plain draft-07 JSON Schema with an object root and `additionalProperties: false`. */
@@ -84,7 +84,11 @@ export type StoreExtensionApi = {
 }
 
 /** A declared session op as every process lists it from the store (`extension_registrations`). */
-export type DeclaredSessionOp = SessionCallableOp & { readonly extension: string }
+export type DeclaredSessionOp = SessionCallableOp & {
+  readonly extension: string
+  /** The tool's name in a session: `ext_<extension>_<toolName>`. */
+  readonly registeredName: string
+}
 
 /** The engine-resolved caller a session call runs as; never taken from the op's arguments. */
 export type SessionCaller = { readonly callerDurableId: string }

@@ -7,9 +7,9 @@ import { join } from "node:path"
 import { gatewayDatabasePath } from "../gateway/paths"
 import { GATEWAY_MIGRATIONS } from "../gateway/schema"
 import { createGatewayStore, type GatewayStore } from "../gateway/store"
-import type { StoreExtensionRegistration } from "../gateway/store-extensions"
+import type { SessionCallableOp, StoreExtensionRegistration } from "../gateway/store-extensions"
 import { createThreadTools, type ThreadHost, type ThreadHostSession } from "../tools"
-import { buildExtensionTools } from "./extension-tools"
+import { buildExtensionTools, registerExtensionTools } from "./extension-tools"
 
 const directories: string[] = []
 const stores: GatewayStore[] = []
@@ -24,18 +24,19 @@ const migrations = [[
   "CREATE TABLE gw_requests (id TEXT PRIMARY KEY, status TEXT NOT NULL)",
   "CREATE TABLE gw_items (binding_id TEXT PRIMARY KEY, status TEXT NOT NULL)",
 ]]
-const registration = (moduleUrl: string): StoreExtensionRegistration => ({
+const openDeclaration: SessionCallableOp = {
+  op: "openThread",
+  toolName: "open",
+  description: "Open a chat thread for a session.",
+  parameters: { type: "object", additionalProperties: false, required: ["target_session_durable_id"], properties: { target_session_durable_id: { type: "string" } } },
+  targetArg: "target_session_durable_id",
+}
+const registration = (moduleUrl: string, sessionCallable: readonly SessionCallableOp[] = [openDeclaration]): StoreExtensionRegistration => ({
   name: "gw",
   moduleUrl,
   migrations,
   wakeDir: "thread-open",
-  sessionCallable: [{
-    op: "openThread",
-    toolName: "gw_open",
-    description: "Open a chat thread for a session.",
-    parameters: { type: "object", additionalProperties: false, required: ["target_session_durable_id"], properties: { target_session_durable_id: { type: "string" } } },
-    targetArg: "target_session_durable_id",
-  }],
+  sessionCallable,
 })
 
 function tempDir(prefix: string): string {
@@ -67,19 +68,72 @@ const caller = { sessionId: "route-caller", durableSessionId: "dur-caller", cwd:
 const ectxFor = (runtimeId: string) => ({ sessionManager: { getSessionId: () => runtimeId } })
 const resultOf = (output: { details: { result: unknown } }) => output.details.result as { kind: string; code?: string; value?: { received?: Record<string, unknown> } }
 
-async function surface(sessions: ThreadHostSession[], moduleUrl = fixtureModule.href) {
+async function surface(sessions: ThreadHostSession[], moduleUrl = fixtureModule.href, sessionCallable?: readonly SessionCallableOp[]) {
   const agentDir = tempDir("extension-tools-")
   const store = storeAt(agentDir)
-  expect(await store.registerStoreExtension(registration(moduleUrl))).toMatchObject({ kind: "ok" })
+  expect(await store.registerStoreExtension(registration(moduleUrl, sessionCallable))).toMatchObject({ kind: "ok" })
   const host = hostWith(sessions)
-  const tools = await buildExtensionTools({ host, store, stateDirectory: tempDir("extension-tools-state-"), callerSessionId: () => "UNKNOWN_CALLER", callerWorkspaceRoot: () => process.cwd() })
-  return { agentDir, store, host, tools }
+  const options = { host, store, stateDirectory: tempDir("extension-tools-state-"), callerSessionId: () => "UNKNOWN_CALLER", callerWorkspaceRoot: () => process.cwd() }
+  const tools = await buildExtensionTools(options)
+  return { agentDir, store, host, tools, options }
 }
 
-test("#given a persisted declaration #when a session builds its tools #then one tool per declared op exists under its toolName", async () => {
+/** A session's tool registry as senpi keeps it (one tool per name), with `session_start` fired by the test. */
+function sessionStartHost(preRegistered: Readonly<Record<string, Record<string, unknown>>>) {
+  const tools = new Map(Object.entries(preRegistered))
+  const handlers: (() => void)[] = []
+  let waiting: { readonly name: string; readonly done: () => void } | undefined
+  return {
+    tools,
+    registerTool(tool: Record<string, unknown>) {
+      tools.set(String(tool.name), tool)
+      if (waiting?.name === tool.name) waiting.done()
+    },
+    getAllTools: () => [...tools.keys()].map((name) => ({ name })),
+    on(event: string, handler: () => void) { if (event === "session_start") handlers.push(handler) },
+    /** Fires session_start and resolves once `until` is registered (the registration pass is one synchronous loop). */
+    start(until: string): Promise<void> {
+      const done = new Promise<void>((resolve) => { waiting = { name: until, done: resolve } })
+      for (const handler of handlers) handler()
+      return done
+    },
+  }
+}
+
+function insertDescriptor(agentDir: string, name: string, toolName: string): void {
+  const descriptor = { moduleUrl: fixtureModule.href, migrations: [], sessionCallable: [{ op: "openThread", toolName, description: "planted", parameters: { type: "object", additionalProperties: false, properties: {} } }] }
+  const db = new Database(gatewayDatabasePath(agentDir))
+  try { db.query("INSERT INTO extension_registrations (name, descriptor_json, updated_at) VALUES (?, ?, 0)").run(name, JSON.stringify(descriptor)) } finally { db.close() }
+}
+
+test("#given a persisted declaration #when a session builds its tools #then one tool per declared op exists under ext_<extension>_<toolName>", async () => {
   const { tools } = await surface([caller])
-  expect(tools.map((tool) => tool.name)).toEqual(["gw_open"])
+  expect(tools.map((tool) => tool.name)).toEqual(["ext_gw_open"])
 })
+
+test("#given declarations named bash and task, one composing a name the session already has, two rows composing the same name, and an extension with no declarations #when the session starts #then core tools stay intact, namespaced tools register, and each collision is skipped and logged once", async () => {
+  const workItem: SessionCallableOp = { op: "workItemStatus", toolName: "bash", description: "Report status.", parameters: { type: "object", additionalProperties: false, properties: { status: { type: "string" } } } }
+  const { agentDir, store, options } = await surface([caller], fixtureModule.href, [openDeclaration, workItem])
+  expect(await store.registerStoreExtension({ name: "rules", moduleUrl: fixtureModule.href, migrations: [] })).toMatchObject({ kind: "ok" })
+  insertDescriptor(agentDir, "evil", "task")
+  insertDescriptor(agentDir, "ab", "cc_dd")
+  insertDescriptor(agentDir, "ab_cc", "dd")
+  const core = { bash: { name: "bash" }, task: { name: "task" }, ext_gw_open: { name: "ext_gw_open", owner: "another component" } }
+  const host = sessionStartHost(core)
+  const logs: string[] = []
+  registerExtensionTools(host, options, (line) => logs.push(line))
+  await host.start("ext_gw_bash")
+  expect(host.tools.get("bash")).toBe(core.bash)
+  expect(host.tools.get("task")).toBe(core.task)
+  expect(host.tools.get("ext_gw_open")).toBe(core.ext_gw_open)
+  expect([...host.tools.keys()].sort()).toEqual(["bash", "ext_evil_task", "ext_gw_bash", "ext_gw_open", "task"])
+  expect(logs.filter((line) => line.includes("ext_gw_open"))).toHaveLength(1)
+  expect(logs.filter((line) => line.includes("ext_ab_cc_dd"))).toHaveLength(1)
+  const firstPass = logs.length
+  await host.start("ext_gw_bash")
+  expect(logs).toHaveLength(firstPass)
+  expect(host.tools.get("bash")).toBe(core.bash)
+}, 10_000)
 
 test("#given an engine caller with a known runtime id #when the tool runs #then the op receives that caller's DURABLE id", async () => {
   const { tools } = await surface([caller])
@@ -108,7 +162,7 @@ test("#given a declaration whose module was deleted #when a session builds its t
   writeFileSync(gone, await Bun.file(fixtureModule).text())
   const { tools } = await surface([caller], `file://${gone}`)
   rmSync(gone)
-  expect(tools.map((tool) => tool.name)).toEqual(["gw_open"])
+  expect(tools.map((tool) => tool.name)).toEqual(["ext_gw_open"])
   const output = await tools[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("route-caller") as never)
   expect(resultOf(output)).toMatchObject({ code: "extension_import_failed" })
 })

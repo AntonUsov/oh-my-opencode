@@ -1,6 +1,6 @@
 /**
  * The session tools of store extensions (omo-gateway todo 14): one tool per session-callable op
- * declared in the store (`extension_registrations`), named by its `toolName`. A tool resolves the
+ * declared in the store (`extension_registrations`), named `ext_<extension>_<toolName>`. A tool resolves the
  * engine's caller (`ectx.sessionManager.getSessionId()`) to its durable id through the address book
  * and calls the op through the store's session channel, which stamps that caller into the op's args
  * inside the op's transaction. There is never an argument fallback for the caller.
@@ -47,8 +47,8 @@ function output(result: StoreExtensionResult<unknown>): ExtensionToolOutput {
 
 function extensionTool(options: ThreadToolSurfaceOptions, op: DeclaredSessionOp): AnyTool {
   return {
-    name: op.toolName,
-    label: op.toolName,
+    name: op.registeredName,
+    label: op.registeredName,
     description: op.description,
     parameters: op.parameters,
     execute: async (_id: string, args: unknown, _signal: unknown, _onUpdate: unknown, ectx: unknown) => {
@@ -68,21 +68,47 @@ export async function buildExtensionTools(options: ThreadToolSurfaceOptions): Pr
   return (await options.store.sessionCallableOps()).map((op) => extensionTool(options, op))
 }
 
-export type ExtensionToolHost = { registerTool(tool: Record<string, unknown>): void; on?(event: string, handler: () => void): void }
+export type ExtensionToolHost = {
+  registerTool(tool: Record<string, unknown>): void
+  on?(event: string, handler: () => void): void
+  /** senpi's tool registry for the session (builtins and every extension's tools). */
+  getAllTools?(): readonly { readonly name: string }[]
+}
 
 /**
  * At each `session_start` registers the declared session tools (none, and no store opened, while no
  * gateway store exists): a declaration made after a session started appears from that session's next
- * start. A wake hint that could not be written after a committed call is logged once; the connector's
- * backstop covers it.
+ * start. A tool never replaces one the session already has from elsewhere, and two declarations that
+ * compose the same name (rows written past `register()`) register neither: each such name is skipped
+ * and logged once per process. A wake hint that could not be written after a committed call is
+ * logged once; the connector's backstop covers it.
  */
-export function registerExtensionTools(pi: Required<ExtensionToolHost>, options: ThreadToolSurfaceOptions, log: (line: string) => void): void {
+export function registerExtensionTools(pi: ExtensionToolHost & Required<Pick<ExtensionToolHost, "on">>, options: ThreadToolSurfaceOptions, log: (line: string) => void): void {
   options.store.onEvent((event) => {
     if (event.kind === "extension_error" && event.phase === "after_commit") log(`thread gateway: extension ${event.extension} committed, but an after-commit effect (its wake hint) failed: ${event.error}`)
   })
+  const mine = new Set<string>()
+  const reported = new Set<string>()
+  const skip = (name: string, why: string): void => {
+    if (reported.has(name)) return
+    reported.add(name)
+    log(`thread gateway: extension session tool ${name} was not registered: ${why}`)
+  }
   pi.on("session_start", () => {
     void buildExtensionTools(options).then(
-      (tools) => { for (const tool of tools) pi.registerTool({ ...tool }) },
+      (tools) => {
+        const present = new Set((pi.getAllTools?.() ?? []).map((tool) => tool.name))
+        const counts = new Map<string, number>()
+        for (const tool of tools) counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1)
+        for (const tool of tools) {
+          if ((counts.get(tool.name) ?? 0) > 1) skip(tool.name, "more than one extension declares it")
+          else if (present.has(tool.name) && !mine.has(tool.name)) skip(tool.name, "the session already has a tool by that name")
+          else {
+            mine.add(tool.name)
+            pi.registerTool({ ...tool })
+          }
+        }
+      },
       (error: unknown) => log(`thread gateway: extension session tools were not registered: ${error instanceof Error ? error.message : String(error)}`),
     )
   })

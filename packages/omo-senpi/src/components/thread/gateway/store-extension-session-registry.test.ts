@@ -20,7 +20,7 @@ const migrations = [[
 ]]
 const openOp: SessionCallableOp = {
   op: "openThread",
-  toolName: "gw_open",
+  toolName: "open",
   description: "Open a chat thread for a session.",
   parameters: { type: "object", additionalProperties: false, required: ["target_session_durable_id"], properties: { target_session_durable_id: { type: "string" }, await: { type: "boolean" }, await_request_id: { type: "string" } } },
   targetArg: "target_session_durable_id",
@@ -29,7 +29,7 @@ const openOp: SessionCallableOp = {
 }
 const statusOp: SessionCallableOp = {
   op: "workItemStatus",
-  toolName: "gw_work_item_status",
+  toolName: "work_item_status",
   description: "Report the status of the caller's own work item.",
   parameters: { type: "object", additionalProperties: false, required: ["status"], properties: { status: { type: "string", enum: ["working", "waiting", "done", "failed"] }, note: { type: "string", maxLength: 500 }, work_item_id: { type: "string" } } },
   wake: "requests.marker",
@@ -43,7 +43,8 @@ const bindTo = (store: GatewayStore, h: GatewayHarness, session: string, chat: s
 
 test.each<[string, Partial<SessionCallableOp>]>([
   ["an op the module does not export", { op: "missingOp" }],
-  ["a toolName in the reserved thread_ family", { toolName: "thread_open" }],
+  ["a toolName past the 41-character short-name bound", { toolName: "t".repeat(42) }],
+  ["a one-character toolName", { toolName: "x" }],
   ["a toolName with uppercase", { toolName: "GwOpen" }],
   ["parameters without additionalProperties:false", { parameters: { type: "object", properties: { target_session_durable_id: { type: "string" } } } }],
   ["a targetArg absent from parameters", { targetArg: "session" }],
@@ -62,12 +63,34 @@ test.each(["../escape", "Thread-Open", ""])("#given wakeDir %p #when registering
   expect(await h.store().registerStoreExtension(registration({ wakeDir }))).toMatchObject({ kind: "refused" })
 })
 
+test("#given the gateway's registration (omo_gateway: thread_open, work_item_status) #when another process lists session ops #then the tools are exactly ext_omo_gateway_thread_open and ext_omo_gateway_work_item_status", async () => {
+  const h = (harness = createGatewayHarness())
+  const gateway = registration({ name: "omo_gateway", migrations: [], sessionCallable: [{ ...openOp, toolName: "thread_open" }, { ...statusOp, toolName: "work_item_status" }] })
+  expect(await h.store().registerStoreExtension(gateway)).toMatchObject({ kind: "ok" })
+  expect((await h.store().sessionCallableOps()).map((entry) => entry.registeredName)).toEqual(["ext_omo_gateway_thread_open", "ext_omo_gateway_work_item_status"])
+})
+
+test("#given a toolName whose composed ext_<extension>_<toolName> passes 64 characters #when registering #then it is refused and nothing is persisted", async () => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  expect(await store.registerStoreExtension(registration({ name: "x".repeat(32), migrations: [], sessionCallable: [{ ...statusOp, toolName: "t".repeat(30) }] }))).toMatchObject({ kind: "refused", code: "invalid_arguments" })
+  expect(await store.sessionCallableOps()).toEqual([])
+})
+
+test("#given two extensions whose composed tool names are equal (ab + cc_dd, ab_cc + dd) #when the second registers #then it is refused and the first keeps the name", async () => {
+  const h = (harness = createGatewayHarness())
+  const store = h.store()
+  expect(await store.registerStoreExtension(registration({ name: "ab", migrations: [], sessionCallable: [{ ...statusOp, toolName: "cc_dd" }] }))).toMatchObject({ kind: "ok" })
+  expect(await store.registerStoreExtension(registration({ name: "ab_cc", migrations: [], sessionCallable: [{ ...statusOp, toolName: "dd" }] }))).toMatchObject({ kind: "refused", code: "invalid_arguments" })
+  expect((await h.store().sessionCallableOps()).map((entry) => [entry.extension, entry.registeredName])).toEqual([["ab", "ext_ab_cc_dd"]])
+})
+
 test("#given two declared ops #when another process lists session ops #then it sees exactly both, and each is refused on the public channel", async () => {
   const h = (harness = createGatewayHarness())
   await h.store().registerStoreExtension(registration())
   const other = h.store()
   const ops = await other.sessionCallableOps()
-  expect(ops.map((entry) => entry.toolName).sort()).toEqual(["gw_open", "gw_work_item_status"])
+  expect(ops.map((entry) => entry.registeredName).sort()).toEqual(["ext_gw_open", "ext_gw_work_item_status"])
   for (const op of ["openThread", "workItemStatus"]) expect(await other.extensionCall("gw", op, {})).toMatchObject({ kind: "refused", code: "caller_not_allowed" })
 })
 
@@ -95,7 +118,7 @@ test("#given a persisted moduleUrl that no longer exists #when a session lists o
   await h.store().registerStoreExtension(registration({ moduleUrl: `file://${gone}` }))
   Bun.spawnSync(["rm", "-f", gone])
   const session = h.store()
-  expect((await session.sessionCallableOps()).map((entry) => entry.toolName).sort()).toEqual(["gw_open", "gw_work_item_status"])
+  expect((await session.sessionCallableOps()).map((entry) => entry.registeredName).sort()).toEqual(["ext_gw_open", "ext_gw_work_item_status"])
   expect(await session.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused", code: "extension_import_failed" })
   writeFileSync(gone, (await Bun.file(new URL(moduleUrl)).text()))
   expect(await session.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })).toMatchObject({ kind: "ok" })
@@ -171,7 +194,7 @@ test("#given the item's lead #when it names that item #then the op accepts it", 
 test("#given a declared wake file #when a session call commits #then the marker is touched after the commit; a refused call and a rolled-back call do not touch it", async () => {
   const h = (harness = createGatewayHarness())
   const store = h.store()
-  await store.registerStoreExtension(registration({ sessionCallable: [openOp, { ...statusOp, op: "failAfterWrite", toolName: "gw_fail", wake: "requests.marker" }] }))
+  await store.registerStoreExtension(registration({ sessionCallable: [openOp, { ...statusOp, op: "failAfterWrite", toolName: "fail", wake: "requests.marker" }] }))
   const marker = join(dirname(gatewayDatabasePath(h.agentDir)), "thread-open", "requests.marker")
   mkdirSync(dirname(marker), { recursive: true })
   expect(await store.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child", nope: 1 }, { callerDurableId: "caller" })).toMatchObject({ kind: "refused" })

@@ -278,7 +278,7 @@ async function deliverThroughGateway(
 export function registerThreadTools(pi: ExtensionToolHost, options: ThreadToolSurfaceOptions, log: (line: string) => void = () => undefined): { readonly dispose: () => void } {
   const built = buildThreadTools(options)
   for (const tool of built.tools) pi.registerTool({ ...tool })
-  if (pi.on !== undefined) registerExtensionTools(pi as Required<ExtensionToolHost>, options, log)
+  if (pi.on !== undefined) registerExtensionTools(pi as ExtensionToolHost & Required<Pick<ExtensionToolHost, "on">>, options, log)
   return { dispose: built.dispose }
 }
 

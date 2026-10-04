@@ -1,4 +1,4 @@
-import { declarationProblem, declaredOpNames, importExtensionModule, persistDescriptor, readDescriptor } from "./extension-registrations"
+import { declarationProblem, declaredOpNames, importExtensionModule, persistDescriptor, readDescriptor, toolNameTaken } from "./extension-registrations"
 import { assertExtensionName, checkExtensionSchema, ExtensionSchemaViolation, extensionSchema, extensionSql, sqliteName } from "./extension-sql"
 import { ExtensionArgumentError, extensionTransaction } from "./extension-transaction"
 import { singleExtensionStatement } from "./extension-statement"
@@ -59,11 +59,15 @@ export class StoreExtensions {
     }
     const exported = declarationProblem(descriptor, module)
     if (exported !== undefined) return refusal("invalid_arguments", `Extension ${descriptor.name}: ${exported}.`)
+    // Checked before any migration runs, so a refused registration leaves the schema untouched;
+    // persistDescriptor checks again inside its own transaction.
+    const taken = toolNameTaken(this.ctx, descriptor)
+    if (taken !== undefined) return refusal("invalid_arguments", `Extension ${descriptor.name}: ${taken}.`)
     try {
       const version = await this.ensure(descriptor, now)
       // The newest registration of a name replaces its persisted descriptor, so every process lists its session ops.
-      const taken = await transaction(this.ctx, "extension_register", () => persistDescriptor(this.ctx, descriptor, now))
-      if (taken !== undefined) return refusal("invalid_arguments", `Extension ${descriptor.name}: ${taken}.`)
+      const raced = await transaction(this.ctx, "extension_register", () => persistDescriptor(this.ctx, descriptor, now))
+      if (raced !== undefined) return refusal("invalid_arguments", `Extension ${descriptor.name}: ${raced}.`)
       this.registered.set(descriptor.name, { descriptor, module })
       return { kind: "ok", value: { version } }
     } catch (error) {

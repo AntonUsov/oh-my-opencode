@@ -26,7 +26,7 @@ const registration = (overrides: Partial<StoreExtensionRegistration> = {}): Stor
   wakeDir: "thread-open",
   sessionCallable: [{
     op: "openThread",
-    toolName: "gw_open",
+    toolName: "open",
     description: "Open a chat thread for a session.",
     parameters,
     targetArg: "target_session_durable_id",

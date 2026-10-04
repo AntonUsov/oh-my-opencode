@@ -14,7 +14,10 @@ import type { DeclaredSessionOp, SessionCallableOp, StoreExtensionRegistration }
 export const RESERVED_CALLER_KEYS = ["caller_session_durable_id", "caller_created_target"] as const
 export const AWAIT_REQUEST_ID = /^tor_[a-f0-9]{32}$/
 export const AWAIT_TIMEOUT_MAX_MS = 120_000
-const TOOL_NAME = /^[a-z][a-z0-9_]{2,63}$/
+/** The declared short name; the session sees it as `ext_<extension>_<toolName>` (`registeredToolName`). */
+const TOOL_NAME = /^[a-z][a-z0-9_]{1,40}$/
+/** The longest composed tool name a provider takes as a function name. */
+export const REGISTERED_TOOL_NAME_MAX = 64
 const WAKE_DIR = /^[a-z0-9][a-z0-9_-]*$/
 const WAKE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
@@ -24,12 +27,23 @@ export type PersistedDescriptor = Pick<StoreExtensionRegistration, "moduleUrl" |
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === "object" && value !== null && !Array.isArray(value)
 const nonEmpty = (value: unknown): value is string => typeof value === "string" && value.length > 0
 
-function entryProblem(entry: unknown, wakeDir: string | undefined): string | undefined {
+/**
+ * The name a declared op's tool is registered under: its own namespace, so no declaration can take
+ * a core or omo tool's name (none of those starts with `ext_`). Two extensions can still compose the
+ * same name (`ab` + `cc_dd`, `ab_cc` + `dd`): `register()` refuses the second, and a session skips
+ * a composed name it already has.
+ */
+export function registeredToolName(extension: string, toolName: string): string {
+  return `ext_${extension}_${toolName}`
+}
+
+function entryProblem(entry: unknown, extension: string, wakeDir: string | undefined): string | undefined {
   if (!isRecord(entry)) return "a sessionCallable entry must be an object"
   const { op, toolName, description, parameters, targetArg, wake } = entry
   const awaited = entry.await
   if (!nonEmpty(op)) return "op must be a non-empty string"
-  if (typeof toolName !== "string" || !TOOL_NAME.test(toolName) || toolName.startsWith("thread_")) return `toolName ${String(toolName)} must match ${TOOL_NAME.source} outside the thread_ family`
+  if (typeof toolName !== "string" || !TOOL_NAME.test(toolName)) return `toolName ${String(toolName)} must match ${TOOL_NAME.source}`
+  if (registeredToolName(extension, toolName).length > REGISTERED_TOOL_NAME_MAX) return `${registeredToolName(extension, toolName)} is longer than ${REGISTERED_TOOL_NAME_MAX} characters`
   if (!nonEmpty(description)) return `${toolName}: description must be a non-empty string`
   if (!isRecord(parameters) || parameters.type !== "object" || parameters.additionalProperties !== false) return `${toolName}: parameters must be an object schema with additionalProperties: false`
   const properties = parameters.properties ?? {}
@@ -48,21 +62,21 @@ function entryProblem(entry: unknown, wakeDir: string | undefined): string | und
 }
 
 /** Why a declaration is invalid, or undefined; `exports` (the imported module) also checks every named op exists. */
-export function declarationProblem(descriptor: Pick<StoreExtensionRegistration, "sessionCallable" | "wakeDir">, exports?: Readonly<Record<string, unknown>>): string | undefined {
-  const { sessionCallable, wakeDir } = descriptor
+export function declarationProblem(descriptor: Pick<StoreExtensionRegistration, "name" | "sessionCallable" | "wakeDir">, exports?: Readonly<Record<string, unknown>>): string | undefined {
+  const { name, sessionCallable, wakeDir } = descriptor
   if (wakeDir !== undefined && (typeof wakeDir !== "string" || !WAKE_DIR.test(wakeDir))) return `wakeDir must be one path segment matching ${WAKE_DIR.source}`
   if (sessionCallable === undefined) return undefined
   if (!Array.isArray(sessionCallable)) return "sessionCallable must be an array"
   const names = new Set<string>()
   for (const entry of sessionCallable as readonly unknown[]) {
-    const problem = entryProblem(entry, wakeDir)
+    const problem = entryProblem(entry, name, wakeDir)
     if (problem !== undefined) return problem
     const op = entry as SessionCallableOp
     if (names.has(op.toolName)) return `toolName ${op.toolName} is declared twice`
     names.add(op.toolName)
     if (exports === undefined) continue
-    for (const name of [op.op, ...(op.await === undefined ? [] : [op.await.statusOp, op.await.expireOp])]) {
-      if (!Object.hasOwn(exports, name) || typeof exports[name] !== "function") return `${op.toolName}: the module exports no operation ${name}`
+    for (const exported of [op.op, ...(op.await === undefined ? [] : [op.await.statusOp, op.await.expireOp])]) {
+      if (!Object.hasOwn(exports, exported) || typeof exports[exported] !== "function") return `${op.toolName}: the module exports no operation ${exported}`
     }
   }
   return undefined
@@ -78,12 +92,12 @@ export function declaredOpNames(descriptor: Pick<StoreExtensionRegistration, "se
   return names
 }
 
-function parse(json: unknown): PersistedDescriptor | undefined {
+function parse(name: string, json: unknown): PersistedDescriptor | undefined {
   try {
     const value = JSON.parse(String(json)) as unknown
     if (!isRecord(value) || typeof value.moduleUrl !== "string" || !Array.isArray(value.migrations)) return undefined
     const descriptor = value as PersistedDescriptor
-    return declarationProblem(descriptor) === undefined ? descriptor : undefined
+    return declarationProblem({ ...descriptor, name }) === undefined ? descriptor : undefined
   } catch {
     return undefined
   }
@@ -92,20 +106,29 @@ function parse(json: unknown): PersistedDescriptor | undefined {
 /** The persisted descriptor of one extension; a row that no longer passes the declaration rules reads as none. */
 export function readDescriptor(ctx: StoreContext, name: string): PersistedDescriptor | undefined {
   const row = ctx.sql.one(["descriptor_json"], "SELECT descriptor_json FROM extension_registrations WHERE name = ?", [name])
-  return row === undefined ? undefined : parse(row.descriptor_json)
+  return row === undefined ? undefined : parse(name, row.descriptor_json)
 }
 
-/** Every declared session op, in extension-name order; one read, no import. */
+/** Every declared session op with its registered tool name, in extension-name order; one read, no import. */
 export function listSessionOps(ctx: StoreContext): DeclaredSessionOp[] {
   const rows = ctx.sql.all(["name", "descriptor_json"], "SELECT name, descriptor_json FROM extension_registrations", [], "name")
-  return rows.flatMap((row) => (parse(row.descriptor_json)?.sessionCallable ?? []).map((entry) => ({ ...entry, extension: String(row.name) })))
+  return rows.flatMap((row) => {
+    const extension = String(row.name)
+    return (parse(extension, row.descriptor_json)?.sessionCallable ?? []).map((entry) => ({ ...entry, extension, registeredName: registeredToolName(extension, entry.toolName) }))
+  })
 }
 
-/** Upserts the descriptor (newest registration wins); refuses a toolName another extension already declares. Runs inside the caller's transaction. */
+/** Why the registration's tools cannot take their names: another extension already composes one of them. */
+export function toolNameTaken(ctx: StoreContext, descriptor: Pick<StoreExtensionRegistration, "name" | "sessionCallable">): string | undefined {
+  const mine = new Set((descriptor.sessionCallable ?? []).map((entry) => registeredToolName(descriptor.name, entry.toolName)))
+  const taken = listSessionOps(ctx).find((entry) => entry.extension !== descriptor.name && mine.has(entry.registeredName))
+  return taken === undefined ? undefined : `tool ${taken.registeredName} is already declared by extension ${taken.extension}`
+}
+
+/** Upserts the descriptor (newest registration wins); refuses a tool name another extension already composes. Runs inside the caller's transaction. */
 export function persistDescriptor(ctx: StoreContext, descriptor: StoreExtensionRegistration, now: number): string | undefined {
-  const mine = new Set((descriptor.sessionCallable ?? []).map((entry) => entry.toolName))
-  const taken = listSessionOps(ctx).find((entry) => entry.extension !== descriptor.name && mine.has(entry.toolName))
-  if (taken !== undefined) return `toolName ${taken.toolName} is already declared by extension ${taken.extension}`
+  const taken = toolNameTaken(ctx, descriptor)
+  if (taken !== undefined) return taken
   const persisted: PersistedDescriptor = {
     moduleUrl: descriptor.moduleUrl,
     migrations: descriptor.migrations,
