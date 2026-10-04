@@ -155,10 +155,11 @@ export function registerMemoryStatic(input: {
       resolveSessionId: () => activeSession.current,
     },
   })
+  const scopeAccess = options.scopeAccess
   registerMemoryGuard(pi, ctx, {
-    ...(options.scopeAccess === undefined ? {} : {
-      readRepoFor: (sessionId: string) => gatewayReadRepo(options.scopeAccess, sessionId, options.cwd()),
-      additionalDeniedRoots: [join(options.scopeAccess.memoryHome(options.cwd()), "agents"), join(options.scopeAccess.memoryHome(options.cwd()), "gateway-scopes")],
+    ...(scopeAccess === undefined ? {} : {
+      readRepoFor: (sessionId: string) => gatewayReadRepo(scopeAccess, sessionId, options.cwd()),
+      additionalDeniedRoots: [join(scopeAccess.memoryHome(options.cwd()), "agents"), join(scopeAccess.memoryHome(options.cwd()), "gateway-scopes")],
     }),
     getContext: (eventContext) => {
       const sessionId = sessionIdFrom(eventContext)

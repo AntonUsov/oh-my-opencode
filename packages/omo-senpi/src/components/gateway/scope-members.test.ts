@@ -27,7 +27,7 @@ const worker = { session_durable_id: "worker", role: "worker" } as const
 
 test("#given competing membership pushes #when both use one expected version #then the first wins and the second changes nothing", async () => {
   const f = fixture = await scopeFixture()
-  expect(await f.call("scopeMembersVersion", { scope: "A" })).toEqual({ version: 0 })
+  expect(await f.call<{ readonly version: number }>("scopeMembersVersion", { scope: "A" })).toEqual({ version: 0 })
   expect(await f.members("A", "team-A", [worker], 0)).toEqual({ kind: "committed", version: 1 })
   expect(await f.members("A", "replacement", [], 0)).toEqual({ kind: "conflict", version: 1 })
   expect(await f.call("memberForSession", { session_durable_id: "worker" })).toMatchObject({ memory_identity: "team-A", version: 1 })
@@ -41,7 +41,7 @@ test("#given membership #when an empty push clears it #then the next learning ca
   await f.members("A", "team-A", [])
   expect((await f.learn("worker", { text: "after removal" })).isError).toBe(true)
   expect((await f.repo("team-A").lsTree()).filter((path) => path.startsWith("learnings/"))).toHaveLength(1)
-  expect(await f.call("scopeMembersVersion", { scope: "A" })).toEqual({ version: 2 })
+  expect(await f.call<{ readonly version: number }>("scopeMembersVersion", { scope: "A" })).toEqual({ version: 2 })
 })
 
 test("#given a null memory identity #when a member learns or renders #then membership remains but memory stays off", async () => {
@@ -67,7 +67,7 @@ test("#given invalid connector payloads #when pushed #then they are refused with
   ]) {
     expect((await f.store.extensionCall("gateway_rules", "scopeMembersCommitted", payload)).kind).toBe("refused")
   }
-  expect(await f.call("scopeMembersVersion", { scope: "A" })).toEqual({ version: 0 })
+  expect(await f.call<{ readonly version: number }>("scopeMembersVersion", { scope: "A" })).toEqual({ version: 0 })
   expect(await f.call("memberForSession", { session_durable_id: "worker" })).toBeNull()
 })
 

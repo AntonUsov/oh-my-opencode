@@ -94,7 +94,11 @@ export function createMemoryComponent(options: MemoryComponentOptions = {}): Omo
         // enablement latch depends on the ORDER of reads across boot -> session_start -> reload.
       })
       const bindSession = createMemorySessionBinder({ loadConfig, now, env, cwd, scopeAccess, sessions, ctx, pi, wiring, enabled: (config) => isEnabled(config, ctx, env) })
+      // A lead whose scope identity changed rebinds before its turn. Registered BEFORE the static handlers: senpi
+      // chains systemPrompt through handlers in order, so the stale scope block it strips is gone before the
+      // projection is built. A preview never rebinds (preview-safe: no session change).
       pi.on("before_agent_start", async (payload, eventCtx) => {
+        if (isRecord(payload) && payload.preview === true) return undefined
         const surface = readSessionSurface(eventCtx)
         const state = sessions.get(surface.id)
         if (state?.context === undefined) return undefined
