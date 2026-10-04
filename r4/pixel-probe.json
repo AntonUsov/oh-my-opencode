@@ -1,0 +1,838 @@
+{
+  "en-390": {
+    "dim": {
+      "text": "meets",
+      "local": 0,
+      "opacity": "1",
+      "color": "oklab(0.642146 0.00256556 -0.0131044)",
+      "x": 195.609375,
+      "y": 581.0625,
+      "width": 56.875,
+      "height": 26,
+      "brightest": [
+        139,
+        140,
+        149
+      ],
+      "contrast": 5.95,
+      "leftBrightest": [
+        139,
+        140,
+        149
+      ],
+      "rightBrightest": [
+        139,
+        140,
+        149
+      ],
+      "leftContrast": 5.95,
+      "rightContrast": 5.95
+    },
+    "lit": {
+      "text": "you",
+      "local": 1,
+      "opacity": "1",
+      "color": "oklab(0.970708 0.000790477 -0.00252378)",
+      "x": 16,
+      "y": 79.0625,
+      "width": 32.984375,
+      "height": 26,
+      "brightest": [
+        245,
+        245,
+        247
+      ],
+      "contrast": 18.27,
+      "leftBrightest": [
+        245,
+        245,
+        247
+      ],
+      "rightBrightest": [
+        245,
+        245,
+        247
+      ],
+      "leftContrast": 18.27,
+      "rightContrast": 18.27
+    },
+    "partials": [
+      {
+        "text": "When",
+        "local": 0.6090745192307709,
+        "opacity": "1",
+        "color": "oklab(0.842265 0.0014844 -0.00666001)",
+        "x": 16,
+        "y": 581.0625,
+        "width": 52.484375,
+        "height": 26,
+        "brightest": [
+          202,
+          203,
+          208
+        ],
+        "contrast": 12.28,
+        "leftBrightest": [
+          202,
+          203,
+          208
+        ],
+        "rightBrightest": [
+          202,
+          203,
+          208
+        ],
+        "leftContrast": 12.28,
+        "rightContrast": 12.28
+      },
+      {
+        "text": "your",
+        "local": 0.4083609193704357,
+        "opacity": "1",
+        "color": "oklab(0.776318 0.00184069 -0.00878368)",
+        "x": 73.484375,
+        "y": 581.0625,
+        "width": 40.5625,
+        "height": 26,
+        "brightest": [
+          181,
+          182,
+          188
+        ],
+        "contrast": 9.84,
+        "leftBrightest": [
+          181,
+          182,
+          188
+        ],
+        "rightBrightest": [
+          181,
+          182,
+          188
+        ],
+        "leftContrast": 9.84,
+        "rightContrast": 9.84
+      },
+      {
+        "text": "wisdom",
+        "local": 0.24927397802965356,
+        "opacity": "1",
+        "color": "oklab(0.724048 0.00212308 -0.0104669)",
+        "x": 119.046875,
+        "y": 581.0625,
+        "width": 71.5625,
+        "height": 26,
+        "brightest": [
+          164,
+          165,
+          173
+        ],
+        "contrast": 8.11,
+        "leftBrightest": [
+          164,
+          165,
+          173
+        ],
+        "rightBrightest": [
+          164,
+          165,
+          173
+        ],
+        "leftContrast": 8.11,
+        "rightContrast": 8.11
+      }
+    ]
+  },
+  "en-1440": {
+    "dim": {
+      "text": "today's",
+      "local": 0,
+      "opacity": "1",
+      "color": "oklab(0.642146 0.00256556 -0.0131044)",
+      "x": 162.75,
+      "y": 639.515625,
+      "width": 78.625,
+      "height": 31,
+      "brightest": [
+        139,
+        140,
+        149
+      ],
+      "contrast": 5.95,
+      "leftBrightest": [
+        139,
+        140,
+        149
+      ],
+      "rightBrightest": [
+        139,
+        140,
+        149
+      ],
+      "leftContrast": 5.95,
+      "rightContrast": 5.95
+    },
+    "lit": {
+      "text": "Agents",
+      "local": 1,
+      "opacity": "1",
+      "color": "oklab(0.970708 0.000790477 -0.00252378)",
+      "x": 32,
+      "y": 257.9375,
+      "width": 77.328125,
+      "height": 31,
+      "brightest": [
+        245,
+        245,
+        247
+      ],
+      "contrast": 18.27,
+      "leftBrightest": [
+        245,
+        245,
+        247
+      ],
+      "rightBrightest": [
+        245,
+        245,
+        247
+      ],
+      "leftContrast": 18.27,
+      "rightContrast": 18.27
+    },
+    "partials": [
+      {
+        "text": "That's",
+        "local": 0.18315272177419362,
+        "opacity": "1",
+        "color": "oklab(0.702323 0.00224045 -0.0111665)",
+        "x": 32,
+        "y": 639.515625,
+        "width": 64.1875,
+        "height": 31,
+        "brightest": [
+          158,
+          158,
+          166
+        ],
+        "contrast": 7.48,
+        "leftBrightest": [
+          158,
+          158,
+          166
+        ],
+        "rightBrightest": [
+          158,
+          158,
+          166
+        ],
+        "leftContrast": 7.48,
+        "rightContrast": 7.48
+      }
+    ]
+  },
+  "en-1920": {
+    "dim": {
+      "text": "your",
+      "local": 0,
+      "opacity": "1",
+      "color": "oklab(0.642146 0.00256556 -0.0131044)",
+      "x": 524.265625,
+      "y": 753.109375,
+      "width": 48.6875,
+      "height": 31,
+      "brightest": [
+        139,
+        140,
+        149
+      ],
+      "contrast": 5.95,
+      "leftBrightest": [
+        139,
+        140,
+        149
+      ],
+      "rightBrightest": [
+        139,
+        140,
+        149
+      ],
+      "leftContrast": 5.95,
+      "rightContrast": 5.95
+    },
+    "lit": {
+      "text": "Agents",
+      "local": 1,
+      "opacity": "1",
+      "color": "oklab(0.970708 0.000790477 -0.00252378)",
+      "x": 272,
+      "y": 257.9375,
+      "width": 77.328125,
+      "height": 31,
+      "brightest": [
+        245,
+        245,
+        247
+      ],
+      "contrast": 18.27,
+      "leftBrightest": [
+        245,
+        245,
+        247
+      ],
+      "rightBrightest": [
+        245,
+        245,
+        247
+      ],
+      "leftContrast": 18.27,
+      "rightContrast": 18.27
+    },
+    "partials": [
+      {
+        "text": "model's",
+        "local": 0.8339491240760901,
+        "opacity": "1",
+        "color": "oklab(0.91615 0.00108523 -0.0042807)",
+        "x": 515.4375,
+        "y": 712.3125,
+        "width": 84.578125,
+        "height": 31,
+        "brightest": [
+          227,
+          227,
+          230
+        ],
+        "contrast": 15.53,
+        "leftBrightest": [
+          227,
+          227,
+          230
+        ],
+        "rightBrightest": [
+          227,
+          227,
+          230
+        ],
+        "leftContrast": 15.53,
+        "rightContrast": 15.53
+      },
+      {
+        "text": "quirks,",
+        "local": 0.6769883737403453,
+        "opacity": "1",
+        "color": "oklab(0.864578 0.00136385 -0.00594144)",
+        "x": 606.015625,
+        "y": 712.3125,
+        "width": 72.375,
+        "height": 31,
+        "brightest": [
+          210,
+          210,
+          214
+        ],
+        "contrast": 13.2,
+        "leftBrightest": [
+          210,
+          210,
+          214
+        ],
+        "rightBrightest": [
+          210,
+          210,
+          214
+        ],
+        "leftContrast": 13.2,
+        "rightContrast": 13.2
+      },
+      {
+        "text": "which",
+        "local": 0.5411741381557158,
+        "opacity": "1",
+        "color": "oklab(0.819955 0.00160493 -0.00737843)",
+        "x": 684.390625,
+        "y": 712.3125,
+        "width": 65.640625,
+        "height": 31,
+        "brightest": [
+          195,
+          195,
+          201
+        ],
+        "contrast": 11.34,
+        "leftBrightest": [
+          195,
+          195,
+          201
+        ],
+        "rightBrightest": [
+          195,
+          195,
+          201
+        ],
+        "leftContrast": 11.34,
+        "rightContrast": 11.34
+      },
+      {
+        "text": "skills...",
+        "local": 0.4170297461789364,
+        "opacity": "1",
+        "color": "oklab(0.779166 0.0018253 -0.00869195)",
+        "x": 756.03125,
+        "y": 712.3125,
+        "width": 70.203125,
+        "height": 31,
+        "brightest": [
+          182,
+          182,
+          189
+        ],
+        "contrast": 9.87,
+        "leftBrightest": [
+          182,
+          182,
+          189
+        ],
+        "rightBrightest": [
+          182,
+          182,
+          189
+        ],
+        "leftContrast": 9.87,
+        "rightContrast": 9.87
+      }
+    ]
+  },
+  "ko-390": {
+    "dim": {
+      "text": "우리가",
+      "local": 0,
+      "opacity": "1",
+      "color": "oklab(0.642146 0.00256556 -0.0131044)",
+      "x": 16,
+      "y": 624.109375,
+      "width": 51.859375,
+      "height": 26,
+      "brightest": [
+        139,
+        140,
+        149
+      ],
+      "contrast": 5.95,
+      "leftBrightest": [
+        139,
+        140,
+        149
+      ],
+      "rightBrightest": [
+        139,
+        140,
+        149
+      ],
+      "leftContrast": 5.95,
+      "rightContrast": 5.95
+    },
+    "lit": {
+      "text": "24시간을",
+      "local": 1,
+      "opacity": "1",
+      "color": "oklab(0.970708 0.000790477 -0.00252378)",
+      "x": 16,
+      "y": 68.109375,
+      "width": 75.75,
+      "height": 26,
+      "brightest": [
+        245,
+        245,
+        247
+      ],
+      "contrast": 18.27,
+      "leftBrightest": [
+        245,
+        245,
+        247
+      ],
+      "rightBrightest": [
+        245,
+        245,
+        247
+      ],
+      "leftContrast": 18.27,
+      "rightContrast": 18.27
+    },
+    "partials": [
+      {
+        "text": "합니다.",
+        "local": 0.5704337834389789,
+        "opacity": "1",
+        "color": "oklab(0.829569 0.00155299 -0.00706885)",
+        "x": 198.859375,
+        "y": 556.109375,
+        "width": 55.890625,
+        "height": 26,
+        "brightest": [
+          198,
+          199,
+          204
+        ],
+        "contrast": 11.79,
+        "leftBrightest": [
+          198,
+          199,
+          204
+        ],
+        "rightBrightest": [
+          198,
+          199,
+          204
+        ],
+        "leftContrast": 11.79,
+        "rightContrast": 11.79
+      }
+    ]
+  },
+  "ko-1440": {
+    "dim": {
+      "text": "것들을",
+      "local": 0,
+      "opacity": "1",
+      "color": "oklab(0.642146 0.00256556 -0.0131044)",
+      "x": 79.484375,
+      "y": 646.0625,
+      "width": 62.234375,
+      "height": 31,
+      "brightest": [
+        139,
+        140,
+        149
+      ],
+      "contrast": 5.95,
+      "leftBrightest": [
+        139,
+        140,
+        149
+      ],
+      "rightBrightest": [
+        139,
+        140,
+        149
+      ],
+      "leftContrast": 5.95,
+      "rightContrast": 5.95
+    },
+    "lit": {
+      "text": "오늘날의",
+      "local": 1,
+      "opacity": "1",
+      "color": "oklab(0.970708 0.000790477 -0.00252378)",
+      "x": 32,
+      "y": 129.375,
+      "width": 82.96875,
+      "height": 31,
+      "brightest": [
+        245,
+        245,
+        247
+      ],
+      "contrast": 18.27,
+      "leftBrightest": [
+        245,
+        245,
+        247
+      ],
+      "rightBrightest": [
+        245,
+        245,
+        247
+      ],
+      "leftContrast": 18.27,
+      "rightContrast": 18.27
+    },
+    "partials": [
+      {
+        "text": "어떻고,",
+        "local": 0.7677030986007018,
+        "opacity": "1",
+        "color": "oklab(0.894384 0.00120282 -0.00498162)",
+        "x": 120.96875,
+        "y": 602.875,
+        "width": 67.0625,
+        "height": 31,
+        "brightest": [
+          219,
+          220,
+          223
+        ],
+        "contrast": 14.51,
+        "leftBrightest": [
+          219,
+          220,
+          223
+        ],
+        "rightBrightest": [
+          219,
+          220,
+          223
+        ],
+        "leftContrast": 14.51,
+        "rightContrast": 14.51
+      },
+      {
+        "text": "모델",
+        "local": 0.6410947721266733,
+        "opacity": "1",
+        "color": "oklab(0.852785 0.00142756 -0.00632121)",
+        "x": 194.03125,
+        "y": 602.875,
+        "width": 41.484375,
+        "height": 31,
+        "brightest": [
+          206,
+          206,
+          211
+        ],
+        "contrast": 12.69,
+        "leftBrightest": [
+          206,
+          206,
+          211
+        ],
+        "rightBrightest": [
+          206,
+          206,
+          211
+        ],
+        "leftContrast": 12.69,
+        "rightContrast": 12.69
+      },
+      {
+        "text": "특성이",
+        "local": 0.5588101903998614,
+        "opacity": "1",
+        "color": "oklab(0.82575 0.00157363 -0.00719183)",
+        "x": 241.515625,
+        "y": 602.875,
+        "width": 62.234375,
+        "height": 31,
+        "brightest": [
+          197,
+          197,
+          203
+        ],
+        "contrast": 11.58,
+        "leftBrightest": [
+          197,
+          197,
+          203
+        ],
+        "rightBrightest": [
+          197,
+          197,
+          203
+        ],
+        "leftContrast": 11.58,
+        "rightContrast": 11.58
+      },
+      {
+        "text": "어떻고,",
+        "local": 0.44056841073517305,
+        "opacity": "1",
+        "color": "oklab(0.7869 0.00178352 -0.0084429)",
+        "x": 309.75,
+        "y": 602.875,
+        "width": 67.0625,
+        "height": 31,
+        "brightest": [
+          184,
+          185,
+          191
+        ],
+        "contrast": 10.17,
+        "leftBrightest": [
+          184,
+          185,
+          191
+        ],
+        "rightBrightest": [
+          184,
+          185,
+          191
+        ],
+        "leftContrast": 10.17,
+        "rightContrast": 10.17
+      }
+    ]
+  },
+  "ko-1920": {
+    "dim": {
+      "text": "합니다.",
+      "local": 0,
+      "opacity": "1",
+      "color": "oklab(0.642146 0.00256556 -0.0131044)",
+      "x": 900.8125,
+      "y": 721.390625,
+      "width": 67.0625,
+      "height": 31,
+      "brightest": [
+        139,
+        140,
+        149
+      ],
+      "contrast": 5.95,
+      "leftBrightest": [
+        139,
+        140,
+        149
+      ],
+      "rightBrightest": [
+        139,
+        140,
+        149
+      ],
+      "leftContrast": 5.95,
+      "rightContrast": 5.95
+    },
+    "lit": {
+      "text": "오늘날의",
+      "local": 1,
+      "opacity": "1",
+      "color": "oklab(0.970708 0.000790477 -0.00252378)",
+      "x": 272,
+      "y": 129.515625,
+      "width": 82.96875,
+      "height": 31,
+      "brightest": [
+        245,
+        245,
+        247
+      ],
+      "contrast": 18.27,
+      "leftBrightest": [
+        245,
+        245,
+        247
+      ],
+      "rightBrightest": [
+        245,
+        245,
+        247
+      ],
+      "leftContrast": 18.27,
+      "rightContrast": 18.27
+    },
+    "partials": [
+      {
+        "text": "고품질의",
+        "local": 0.8362860979286879,
+        "opacity": "1",
+        "color": "oklab(0.916918 0.00108108 -0.00425597)",
+        "x": 408.46875,
+        "y": 721.390625,
+        "width": 82.96875,
+        "height": 31,
+        "brightest": [
+          227,
+          227,
+          230
+        ],
+        "contrast": 15.53,
+        "leftBrightest": [
+          227,
+          227,
+          230
+        ],
+        "rightBrightest": [
+          227,
+          227,
+          230
+        ],
+        "leftContrast": 15.53,
+        "rightContrast": 15.53
+      },
+      {
+        "text": "토큰을",
+        "local": 0.6821141965293898,
+        "opacity": "1",
+        "color": "oklab(0.866263 0.00135475 -0.0058872)",
+        "x": 497.4375,
+        "y": 721.390625,
+        "width": 62.234375,
+        "height": 31,
+        "brightest": [
+          210,
+          210,
+          215
+        ],
+        "contrast": 13.21,
+        "leftBrightest": [
+          210,
+          210,
+          215
+        ],
+        "rightBrightest": [
+          210,
+          210,
+          215
+        ],
+        "leftContrast": 13.21,
+        "rightContrast": 13.21
+      },
+      {
+        "text": "만나면",
+        "local": 0.5638724168647014,
+        "opacity": "1",
+        "color": "oklab(0.827413 0.00156464 -0.00713827)",
+        "x": 565.671875,
+        "y": 721.390625,
+        "width": 62.234375,
+        "height": 31,
+        "brightest": [
+          197,
+          198,
+          203
+        ],
+        "contrast": 11.67,
+        "leftBrightest": [
+          197,
+          198,
+          203
+        ],
+        "rightBrightest": [
+          197,
+          198,
+          203
+        ],
+        "leftContrast": 11.67,
+        "rightContrast": 11.67
+      },
+      {
+        "text": "좋은",
+        "local": 0.44563063720001317,
+        "opacity": "1",
+        "color": "oklab(0.788563 0.00177453 -0.00838934)",
+        "x": 633.90625,
+        "y": 721.390625,
+        "width": 41.484375,
+        "height": 31,
+        "brightest": [
+          185,
+          185,
+          192
+        ],
+        "contrast": 10.2,
+        "leftBrightest": [
+          185,
+          185,
+          192
+        ],
+        "rightBrightest": [
+          185,
+          185,
+          192
+        ],
+        "leftContrast": 10.2,
+        "rightContrast": 10.2
+      }
+    ]
+  }
+}

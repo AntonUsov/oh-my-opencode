@@ -1,0 +1,82 @@
+{
+  "en-load-reduced": {
+    "word": "You",
+    "before": {
+      "text": "You",
+      "opacity": "1",
+      "color": "rgb(245, 245, 247)",
+      "top": 741
+    },
+    "after": {
+      "opacity": "1",
+      "color": "rgb(245, 245, 247)",
+      "top": 341
+    },
+    "all": {
+      "words": 406,
+      "notOpaque": 0,
+      "notHi": 0,
+      "inline": 0
+    }
+  },
+  "en-toggle-midsession": {
+    "beforeToggle": {
+      "words": 406,
+      "notOpaque": 0,
+      "notHi": 406,
+      "inline": 406
+    },
+    "afterToggle": {
+      "words": 406,
+      "notOpaque": 0,
+      "notHi": 0,
+      "inline": 406
+    },
+    "afterToggleScroll": {
+      "words": 406,
+      "notOpaque": 0,
+      "notHi": 0,
+      "inline": 406
+    }
+  },
+  "ko-load-reduced": {
+    "word": "이런",
+    "before": {
+      "text": "이런",
+      "opacity": "1",
+      "color": "rgb(245, 245, 247)",
+      "top": 735
+    },
+    "after": {
+      "opacity": "1",
+      "color": "rgb(245, 245, 247)",
+      "top": 335
+    },
+    "all": {
+      "words": 263,
+      "notOpaque": 0,
+      "notHi": 0,
+      "inline": 0
+    }
+  },
+  "ko-toggle-midsession": {
+    "beforeToggle": {
+      "words": 263,
+      "notOpaque": 0,
+      "notHi": 263,
+      "inline": 263
+    },
+    "afterToggle": {
+      "words": 263,
+      "notOpaque": 0,
+      "notHi": 0,
+      "inline": 263
+    },
+    "afterToggleScroll": {
+      "words": 263,
+      "notOpaque": 0,
+      "notHi": 0,
+      "inline": 263
+    }
+  }
+}

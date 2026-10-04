@@ -1,0 +1,168 @@
+{
+  "jsdisabled-en-390": {
+    "words": 406,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 406
+    },
+    "modes": "pending"
+  },
+  "prehydration-en-390": {
+    "words": 406,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 406
+    },
+    "modes": "pending",
+    "heldScripts": 12
+  },
+  "crossline-en-390": {
+    "positions": 52,
+    "wrapPairsInTransition": 32,
+    "inversions": 12,
+    "maxDelta": 0.303,
+    "worst": "at=1.00 a=1.00 keyboard=1.00 and=0.81 a=0.67 / mouse=0.98 and=0.74 do=0.61",
+    "worstY": 279,
+    "shot": "en-390-crossline-worst.png"
+  },
+  "jsdisabled-en-1440": {
+    "words": 406,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 406
+    },
+    "modes": "pending"
+  },
+  "prehydration-en-1440": {
+    "words": 406,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 406
+    },
+    "modes": "pending",
+    "heldScripts": 12
+  },
+  "crossline-en-1440": {
+    "positions": 49,
+    "wrapPairsInTransition": 23,
+    "inversions": 8,
+    "maxDelta": 0.328,
+    "worst": "problems=0.70 that=0.51 matter=0.43 to=0.29 them=0.24 / and=0.57 toss=0.49 them=0.40",
+    "worstY": 3861,
+    "shot": "en-1440-crossline-worst.png"
+  },
+  "jsdisabled-en-1920": {
+    "words": 406,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 406
+    },
+    "modes": "pending"
+  },
+  "prehydration-en-1920": {
+    "words": 406,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 406
+    },
+    "modes": "pending",
+    "heldScripts": 12
+  },
+  "crossline-en-1920": {
+    "positions": 39,
+    "wrapPairsInTransition": 15,
+    "inversions": 5,
+    "maxDelta": 0.291,
+    "worst": "an=0.32 agent=0.26 uses=0.14 to=0.04 make=0.00 / sense=0.29 of=0.17 the=0.12",
+    "worstY": 2499,
+    "shot": "en-1920-crossline-worst.png"
+  },
+  "jsdisabled-ko-390": {
+    "words": 263,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 263
+    },
+    "modes": "pending"
+  },
+  "prehydration-ko-390": {
+    "words": 263,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 263
+    },
+    "modes": "pending",
+    "heldScripts": 12
+  },
+  "crossline-ko-390": {
+    "positions": 46,
+    "wrapPairsInTransition": 25,
+    "inversions": 4,
+    "maxDelta": 0.188,
+    "worst": "지혜가=1.00 고품질의=0.93 토큰을=0.67 만나면=0.47 좋은=0.28 / 결과물로=0.46 컴파일되어야=0.20 합니다.=0.00",
+    "worstY": 1488,
+    "shot": "ko-390-crossline-worst.png"
+  },
+  "jsdisabled-ko-1440": {
+    "words": 263,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 263
+    },
+    "modes": "pending"
+  },
+  "prehydration-ko-1440": {
+    "words": 263,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 263
+    },
+    "modes": "pending",
+    "heldScripts": 12
+  },
+  "crossline-ko-1440": {
+    "positions": 45,
+    "wrapPairsInTransition": 20,
+    "inversions": 2,
+    "maxDelta": 0.193,
+    "worst": "마우스를=0.74 만지고=0.59 같은=0.47 작업을=0.38 하지만,=0.27 / 같지=0.46 않습니다.=0.38",
+    "worstY": 396,
+    "shot": "ko-1440-crossline-worst.png"
+  },
+  "jsdisabled-ko-1920": {
+    "words": 263,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 263
+    },
+    "modes": "pending"
+  },
+  "prehydration-ko-1920": {
+    "words": 263,
+    "notHi": 0,
+    "notOpaque": 0,
+    "colors": {
+      "245,245,247": 263
+    },
+    "modes": "pending",
+    "heldScripts": 12
+  },
+  "crossline-ko-1920": {
+    "positions": 36,
+    "wrapPairsInTransition": 15,
+    "inversions": 0,
+    "maxDelta": 0,
+    "worst": null
+  }
+}

@@ -1,0 +1,472 @@
+{
+  "reduced-en-390": {
+    "inlineLocal": 0,
+    "words": 406,
+    "notHi": 0,
+    "withGradient": 0,
+    "blurred": 0,
+    "notOpaque": 0,
+    "litAnimations": 0,
+    "modes": "observer",
+    "changedAfter400pxScroll": false,
+    "inlineLocalAfterScroll": 0,
+    "shots": [
+      "en-390-reduced-top.png",
+      "en-390-reduced-mid.png",
+      "en-390-reduced-mid-plus400.png"
+    ]
+  },
+  "jsblocked-en-390": {
+    "route-abort": {
+      "words": 406,
+      "unlit": 0,
+      "blurred": 0,
+      "modes": "pending",
+      "abortedRequests": 12,
+      "shots": [
+        "en-390-jsblocked-top.png",
+        "en-390-jsblocked-mid.png"
+      ]
+    },
+    "js-disabled": {
+      "words": 406,
+      "unlit": 406,
+      "modes": "pending",
+      "shots": [
+        "en-390-jsdisabled-mid.png"
+      ]
+    }
+  },
+  "reload-en-390": {
+    "prehydration": {
+      "words": 406,
+      "unlit": 406,
+      "modes": "pending",
+      "heldScripts": 12
+    },
+    "reload-top": {
+      "frames": 241,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 0,
+      "lastY": 0,
+      "shot": "en-390-reload-top.png"
+    },
+    "reload-mid": {
+      "frames": 240,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 2269,
+      "lastY": 2235,
+      "shot": "en-390-reload-mid.png"
+    }
+  },
+  "agree-en-390": {
+    "nativeSupports": true,
+    "fallbackSupports": false,
+    "positions": 6,
+    "mismatches": 0,
+    "litScrollBlocksNative": 0,
+    "litScrollBlocksFallback": 0
+  },
+  "reduced-en-1440": {
+    "inlineLocal": 0,
+    "words": 406,
+    "notHi": 0,
+    "withGradient": 0,
+    "blurred": 0,
+    "notOpaque": 0,
+    "litAnimations": 0,
+    "modes": "observer",
+    "changedAfter400pxScroll": false,
+    "inlineLocalAfterScroll": 0,
+    "shots": [
+      "en-1440-reduced-top.png",
+      "en-1440-reduced-mid.png",
+      "en-1440-reduced-mid-plus400.png"
+    ]
+  },
+  "jsblocked-en-1440": {
+    "route-abort": {
+      "words": 406,
+      "unlit": 0,
+      "blurred": 0,
+      "modes": "pending",
+      "abortedRequests": 12,
+      "shots": [
+        "en-1440-jsblocked-top.png",
+        "en-1440-jsblocked-mid.png",
+        "en-1440-jsblocked-full.png"
+      ]
+    },
+    "js-disabled": {
+      "words": 406,
+      "unlit": 406,
+      "modes": "pending",
+      "shots": [
+        "en-1440-jsdisabled-mid.png"
+      ]
+    }
+  },
+  "reload-en-1440": {
+    "prehydration": {
+      "words": 406,
+      "unlit": 406,
+      "modes": "pending",
+      "heldScripts": 12
+    },
+    "reload-top": {
+      "frames": 241,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 0,
+      "lastY": 0,
+      "shot": "en-1440-reload-top.png"
+    },
+    "reload-mid": {
+      "frames": 241,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 2286,
+      "lastY": 2286,
+      "shot": "en-1440-reload-mid.png"
+    }
+  },
+  "agree-en-1440": {
+    "nativeSupports": true,
+    "fallbackSupports": false,
+    "positions": 6,
+    "mismatches": 0,
+    "litScrollBlocksNative": 0,
+    "litScrollBlocksFallback": 0
+  },
+  "reduced-en-1920": {
+    "inlineLocal": 0,
+    "words": 406,
+    "notHi": 0,
+    "withGradient": 0,
+    "blurred": 0,
+    "notOpaque": 0,
+    "litAnimations": 0,
+    "modes": "observer",
+    "changedAfter400pxScroll": false,
+    "inlineLocalAfterScroll": 0,
+    "shots": [
+      "en-1920-reduced-top.png",
+      "en-1920-reduced-mid.png",
+      "en-1920-reduced-mid-plus400.png"
+    ]
+  },
+  "jsblocked-en-1920": {
+    "route-abort": {
+      "words": 406,
+      "unlit": 0,
+      "blurred": 0,
+      "modes": "pending",
+      "abortedRequests": 12,
+      "shots": [
+        "en-1920-jsblocked-top.png",
+        "en-1920-jsblocked-mid.png"
+      ]
+    },
+    "js-disabled": {
+      "words": 406,
+      "unlit": 406,
+      "modes": "pending",
+      "shots": [
+        "en-1920-jsdisabled-mid.png"
+      ]
+    }
+  },
+  "reload-en-1920": {
+    "prehydration": {
+      "words": 406,
+      "unlit": 406,
+      "modes": "pending",
+      "heldScripts": 12
+    },
+    "reload-top": {
+      "frames": 241,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 0,
+      "lastY": 0,
+      "shot": "en-1920-reload-top.png"
+    },
+    "reload-mid": {
+      "frames": 241,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 2286,
+      "lastY": 2286,
+      "shot": "en-1920-reload-mid.png"
+    }
+  },
+  "agree-en-1920": {
+    "nativeSupports": true,
+    "fallbackSupports": false,
+    "positions": 6,
+    "mismatches": 0,
+    "litScrollBlocksNative": 0,
+    "litScrollBlocksFallback": 0
+  },
+  "reduced-ko-390": {
+    "inlineLocal": 0,
+    "words": 263,
+    "notHi": 0,
+    "withGradient": 0,
+    "blurred": 0,
+    "notOpaque": 0,
+    "litAnimations": 0,
+    "modes": "observer",
+    "changedAfter400pxScroll": false,
+    "inlineLocalAfterScroll": 0,
+    "shots": [
+      "ko-390-reduced-top.png",
+      "ko-390-reduced-mid.png",
+      "ko-390-reduced-mid-plus400.png"
+    ]
+  },
+  "jsblocked-ko-390": {
+    "route-abort": {
+      "words": 263,
+      "unlit": 0,
+      "blurred": 0,
+      "modes": "pending",
+      "abortedRequests": 12,
+      "shots": [
+        "ko-390-jsblocked-top.png",
+        "ko-390-jsblocked-mid.png"
+      ]
+    },
+    "js-disabled": {
+      "words": 263,
+      "unlit": 263,
+      "modes": "pending",
+      "shots": [
+        "ko-390-jsdisabled-mid.png"
+      ]
+    }
+  },
+  "reload-ko-390": {
+    "prehydration": {
+      "words": 263,
+      "unlit": 263,
+      "modes": "pending",
+      "heldScripts": 12
+    },
+    "reload-top": {
+      "frames": 240,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 0,
+      "lastY": 0,
+      "shot": "ko-390-reload-top.png"
+    },
+    "reload-mid": {
+      "frames": 241,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 2025,
+      "lastY": 2025,
+      "shot": "ko-390-reload-mid.png"
+    }
+  },
+  "agree-ko-390": {
+    "nativeSupports": true,
+    "fallbackSupports": false,
+    "positions": 6,
+    "mismatches": 0,
+    "litScrollBlocksNative": 0,
+    "litScrollBlocksFallback": 0
+  },
+  "reduced-ko-1440": {
+    "inlineLocal": 0,
+    "words": 263,
+    "notHi": 0,
+    "withGradient": 0,
+    "blurred": 0,
+    "notOpaque": 0,
+    "litAnimations": 0,
+    "modes": "observer",
+    "changedAfter400pxScroll": false,
+    "inlineLocalAfterScroll": 0,
+    "shots": [
+      "ko-1440-reduced-top.png",
+      "ko-1440-reduced-mid.png",
+      "ko-1440-reduced-mid-plus400.png"
+    ]
+  },
+  "jsblocked-ko-1440": {
+    "route-abort": {
+      "words": 263,
+      "unlit": 0,
+      "blurred": 0,
+      "modes": "pending",
+      "abortedRequests": 12,
+      "shots": [
+        "ko-1440-jsblocked-top.png",
+        "ko-1440-jsblocked-mid.png",
+        "ko-1440-jsblocked-full.png"
+      ]
+    },
+    "js-disabled": {
+      "words": 263,
+      "unlit": 263,
+      "modes": "pending",
+      "shots": [
+        "ko-1440-jsdisabled-mid.png"
+      ]
+    }
+  },
+  "reload-ko-1440": {
+    "prehydration": {
+      "words": 263,
+      "unlit": 263,
+      "modes": "pending",
+      "heldScripts": 12
+    },
+    "reload-top": {
+      "frames": 240,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 0,
+      "lastY": 0,
+      "shot": "ko-1440-reload-top.png"
+    },
+    "reload-mid": {
+      "frames": 240,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 2118,
+      "lastY": 2118,
+      "shot": "ko-1440-reload-mid.png"
+    }
+  },
+  "agree-ko-1440": {
+    "nativeSupports": true,
+    "fallbackSupports": false,
+    "positions": 6,
+    "mismatches": 0,
+    "litScrollBlocksNative": 0,
+    "litScrollBlocksFallback": 0
+  },
+  "reduced-ko-1920": {
+    "inlineLocal": 0,
+    "words": 263,
+    "notHi": 0,
+    "withGradient": 0,
+    "blurred": 0,
+    "notOpaque": 0,
+    "litAnimations": 0,
+    "modes": "observer",
+    "changedAfter400pxScroll": false,
+    "inlineLocalAfterScroll": 0,
+    "shots": [
+      "ko-1920-reduced-top.png",
+      "ko-1920-reduced-mid.png",
+      "ko-1920-reduced-mid-plus400.png"
+    ]
+  },
+  "jsblocked-ko-1920": {
+    "route-abort": {
+      "words": 263,
+      "unlit": 0,
+      "blurred": 0,
+      "modes": "pending",
+      "abortedRequests": 12,
+      "shots": [
+        "ko-1920-jsblocked-top.png",
+        "ko-1920-jsblocked-mid.png"
+      ]
+    },
+    "js-disabled": {
+      "words": 263,
+      "unlit": 263,
+      "modes": "pending",
+      "shots": [
+        "ko-1920-jsdisabled-mid.png"
+      ]
+    }
+  },
+  "reload-ko-1920": {
+    "prehydration": {
+      "words": 263,
+      "unlit": 263,
+      "modes": "pending",
+      "heldScripts": 12
+    },
+    "reload-top": {
+      "frames": 241,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 0,
+      "lastY": 0,
+      "shot": "ko-1920-reload-top.png"
+    },
+    "reload-mid": {
+      "frames": 240,
+      "modesSeq": [
+        "pending",
+        "observer"
+      ],
+      "upperUnlitMax": 0,
+      "flash": false,
+      "firstY": 2118,
+      "lastY": 2118,
+      "shot": "ko-1920-reload-mid.png"
+    }
+  },
+  "agree-ko-1920": {
+    "nativeSupports": true,
+    "fallbackSupports": false,
+    "positions": 6,
+    "mismatches": 0,
+    "litScrollBlocksNative": 0,
+    "litScrollBlocksFallback": 0
+  }
+}

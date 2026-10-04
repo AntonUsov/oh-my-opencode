@@ -1,0 +1,581 @@
+{
+  "normal-en-390": {
+    "motion": {
+      "samples": 90,
+      "minOpacity": 1,
+      "frontierMin": 0.6158730746445498,
+      "frontierMinAfterStart": 0.6209271327014217,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)",
+        "oklab(0.642376 0.00256432 -0.013097)",
+        "oklab(0.643651 0.00255743 -0.0130559)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAMax": 0,
+      "splitMax": 0,
+      "samplesWithSplit": 0,
+      "splitSample": "",
+      "upperUnlitMax": 0,
+      "stripes": 0,
+      "violations": 0,
+      "gradientLines": 117,
+      "blurred": 0
+    },
+    "video": "en-390-scroll.webm",
+    "layout": {
+      "vw": 390,
+      "clientW": 390,
+      "scrollW": 390,
+      "bodyL": 16,
+      "bodyR": 16,
+      "bodyW": 358,
+      "fontSize": "20px",
+      "lineHeight": "34px",
+      "h1": "Ultrawork Manifesto",
+      "bodyBg": "rgb(10, 10, 10)",
+      "htmlClass": "dark geistsans_d5a4f12f-module__Ur3q_a__variable geistmono_157ca88a-module__iaM1Ya__variable"
+    },
+    "scan": {
+      "positions": 52,
+      "minOpacity": 1,
+      "frontierMin": 0.6209271327014217,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)",
+        "oklab(0.642714 0.0025625 -0.0130861)",
+        "oklab(0.642983 0.00256104 -0.0130774)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAPositions": 0,
+      "belowAAMax": 0,
+      "split": 0,
+      "positionsWithSplit": 0,
+      "splitSamples": [],
+      "upperUnlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "partialLines": 56,
+      "gradientLines": 54,
+      "violationSamples": []
+    },
+    "shots": [
+      {
+        "file": "en-390-transition1.png",
+        "clipFile": "en-390-transition1-zoom.png",
+        "y": 279,
+        "partial": 7,
+        "sample": "mouse=0.97 and=0.74 do=0.61 the=0.51 same=0.39 work=0.20 as=0.02"
+      },
+      {
+        "file": "en-390-transition2.png",
+        "clipFile": "en-390-transition2-zoom.png",
+        "y": 1395,
+        "partial": 6,
+        "sample": "You=1.00 put=0.94 in=0.81 quality=0.73 tokens=0.50 and=0.27 compute,=0.13"
+      }
+    ],
+    "end": {
+      "minOpacity": 1,
+      "frontierFrac": 1,
+      "floorCount": 0,
+      "floorColors": [],
+      "split": 0,
+      "splitSample": "",
+      "minContrast": 99,
+      "belowAA": 0,
+      "count": 0,
+      "upper": 0,
+      "upperUnlit": 0,
+      "unlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "violationSamples": [],
+      "partialLines": 0,
+      "gradientLines": 0,
+      "modes": "observer",
+      "y": 4743
+    }
+  },
+  "normal-en-1440": {
+    "motion": {
+      "samples": 90,
+      "minOpacity": 1,
+      "frontierMin": 0.6085243055555556,
+      "frontierMinAfterStart": 0.6085243055555556,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAMax": 0,
+      "splitMax": 0,
+      "samplesWithSplit": 0,
+      "splitSample": "",
+      "upperUnlitMax": 0,
+      "stripes": 0,
+      "violations": 0,
+      "gradientLines": 76,
+      "blurred": 0
+    },
+    "video": "en-1440-scroll.webm",
+    "layout": {
+      "vw": 1440,
+      "clientW": 1440,
+      "scrollW": 1440,
+      "bodyL": 32,
+      "bodyR": 687,
+      "bodyW": 721,
+      "fontSize": "24px",
+      "lineHeight": "40.8px",
+      "h1": "Ultrawork Manifesto",
+      "bodyBg": "rgb(10, 10, 10)",
+      "htmlClass": "dark geistsans_d5a4f12f-module__Ur3q_a__variable geistmono_157ca88a-module__iaM1Ya__variable"
+    },
+    "scan": {
+      "positions": 49,
+      "minOpacity": 1,
+      "frontierMin": 0.6059548611111111,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAPositions": 0,
+      "belowAAMax": 0,
+      "split": 0,
+      "positionsWithSplit": 0,
+      "splitSamples": [],
+      "upperUnlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "partialLines": 46,
+      "gradientLines": 45,
+      "violationSamples": []
+    },
+    "shots": [
+      {
+        "file": "en-1440-transition1.png",
+        "clipFile": "en-1440-transition1-zoom.png",
+        "y": 693,
+        "partial": 12,
+        "sample": "Every=0.93 day,=0.81 we=0.73 mix=0.66 in=0.58 a=0.54 little=0.51 of=0.41 our=0.36 own=0.29 wisdom=0.20 and=0.04 experience.=0.00"
+      },
+      {
+        "file": "en-1440-transition2.png",
+        "clipFile": "en-1440-transition2-zoom.png",
+        "y": 2574,
+        "partial": 9,
+        "sample": "What=0.91 you=0.80 picked=0.72 up=0.58 by=0.53 living=0.47 as=0.35 a=0.30 human=0.27"
+      }
+    ],
+    "end": {
+      "minOpacity": 1,
+      "frontierFrac": 1,
+      "floorCount": 0,
+      "floorColors": [],
+      "split": 0,
+      "splitSample": "",
+      "minContrast": 18.27202784024654,
+      "belowAA": 0,
+      "count": 4,
+      "upper": 4,
+      "upperUnlit": 0,
+      "unlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "violationSamples": [],
+      "partialLines": 0,
+      "gradientLines": 0,
+      "modes": "observer",
+      "y": 4815
+    }
+  },
+  "normal-en-1920": {
+    "motion": {
+      "samples": 90,
+      "minOpacity": 1,
+      "frontierMin": 0.6237702546296297,
+      "frontierMinAfterStart": 0.6291956018518519,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAMax": 0,
+      "splitMax": 0,
+      "samplesWithSplit": 0,
+      "splitSample": "",
+      "upperUnlitMax": 0,
+      "stripes": 0,
+      "violations": 0,
+      "gradientLines": 85,
+      "blurred": 0
+    },
+    "video": "en-1920-scroll.webm",
+    "layout": {
+      "vw": 1920,
+      "clientW": 1920,
+      "scrollW": 1920,
+      "bodyL": 272,
+      "bodyR": 927,
+      "bodyW": 721,
+      "fontSize": "24px",
+      "lineHeight": "40.8px",
+      "h1": "Ultrawork Manifesto",
+      "bodyBg": "rgb(10, 10, 10)",
+      "htmlClass": "dark geistsans_d5a4f12f-module__Ur3q_a__variable geistmono_157ca88a-module__iaM1Ya__variable"
+    },
+    "scan": {
+      "positions": 39,
+      "minOpacity": 1,
+      "frontierMin": 0.6264322916666667,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)",
+        "oklab(0.643255 0.00255957 -0.0130687)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAPositions": 0,
+      "belowAAMax": 0,
+      "split": 0,
+      "positionsWithSplit": 0,
+      "splitSamples": [],
+      "upperUnlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "partialLines": 34,
+      "gradientLines": 34,
+      "violationSamples": []
+    },
+    "shots": [
+      {
+        "file": "en-1920-transition1.png",
+        "clipFile": "en-1920-transition1-zoom.png",
+        "y": 2499,
+        "partial": 10,
+        "sample": "still=1.00 won't=1.00 come=0.92 out=0.81 of=0.73 the=0.69 few=0.61 characters=0.53 an=0.32 agent=0.26 uses=0.14 to=0.04 make=0.00"
+      },
+      {
+        "file": "en-1920-transition2.png",
+        "clipFile": "en-1920-transition2-zoom.png",
+        "y": 1309,
+        "partial": 8,
+        "sample": "They=0.76 read=0.66 dozens=0.57 of=0.42 times=0.37 more=0.26 than=0.15 you=0.05 ever=0.00 could,=0.00"
+      }
+    ],
+    "end": {
+      "minOpacity": 1,
+      "frontierFrac": 1,
+      "floorCount": 0,
+      "floorColors": [],
+      "split": 0,
+      "splitSample": "",
+      "minContrast": 18.27202784024654,
+      "belowAA": 0,
+      "count": 11,
+      "upper": 11,
+      "upperUnlit": 0,
+      "unlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "violationSamples": [],
+      "partialLines": 0,
+      "gradientLines": 0,
+      "modes": "observer",
+      "y": 4635
+    }
+  },
+  "normal-ko-390": {
+    "motion": {
+      "samples": 90,
+      "minOpacity": 1,
+      "frontierMin": 0.6182982819905213,
+      "frontierMinAfterStart": 0.6209826718009479,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)",
+        "oklab(0.642158 0.0025655 -0.013104)",
+        "oklab(0.642557 0.00256335 -0.0130912)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAMax": 0,
+      "splitMax": 0,
+      "samplesWithSplit": 0,
+      "splitSample": "",
+      "upperUnlitMax": 0,
+      "stripes": 0,
+      "violations": 0,
+      "gradientLines": 115,
+      "blurred": 0
+    },
+    "video": "ko-390-scroll.webm",
+    "layout": {
+      "vw": 390,
+      "clientW": 390,
+      "scrollW": 390,
+      "bodyL": 16,
+      "bodyR": 16,
+      "bodyW": 358,
+      "fontSize": "20px",
+      "lineHeight": "36px",
+      "h1": "Ultrawork Manifesto",
+      "bodyBg": "rgb(10, 10, 10)",
+      "htmlClass": "dark geistsans_d5a4f12f-module__Ur3q_a__variable geistmono_157ca88a-module__iaM1Ya__variable"
+    },
+    "scan": {
+      "positions": 46,
+      "minOpacity": 1,
+      "frontierMin": 0.6275362855450237,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)",
+        "oklab(0.642397 0.00256421 -0.0130963)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAPositions": 0,
+      "belowAAMax": 0,
+      "split": 0,
+      "positionsWithSplit": 0,
+      "splitSamples": [],
+      "upperUnlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "partialLines": 47,
+      "gradientLines": 47,
+      "violationSamples": []
+    },
+    "shots": [
+      {
+        "file": "ko-390-transition1.png",
+        "clipFile": "ko-390-transition1-zoom.png",
+        "y": 2139,
+        "partial": 5,
+        "sample": "에이전트들이=1.00 세상을=0.68 이해하는=0.48 글자=0.22 몇=0.08 자=0.01"
+      },
+      {
+        "file": "ko-390-transition2.png",
+        "clipFile": "ko-390-transition2-zoom.png",
+        "y": 3348,
+        "partial": 5,
+        "sample": "우리는=0.74 그때=0.54 당신이=0.40 또다시=0.21 집중할=0.01 수=0.00 있도록=0.00"
+      }
+    ],
+    "end": {
+      "minOpacity": 1,
+      "frontierFrac": 1,
+      "floorCount": 0,
+      "floorColors": [],
+      "split": 0,
+      "splitSample": "",
+      "minContrast": 99,
+      "belowAA": 0,
+      "count": 0,
+      "upper": 0,
+      "upperUnlit": 0,
+      "unlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "violationSamples": [],
+      "partialLines": 0,
+      "gradientLines": 0,
+      "modes": "observer",
+      "y": 4219
+    }
+  },
+  "normal-ko-1440": {
+    "motion": {
+      "samples": 90,
+      "minOpacity": 1,
+      "frontierMin": 0.6040104166666667,
+      "frontierMinAfterStart": 0.6259722222222223,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)",
+        "oklab(0.643597 0.00255773 -0.0130577)",
+        "oklab(0.643543 0.00255801 -0.0130594)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAMax": 0,
+      "splitMax": 0,
+      "samplesWithSplit": 0,
+      "splitSample": "",
+      "upperUnlitMax": 0,
+      "stripes": 0,
+      "violations": 0,
+      "gradientLines": 77,
+      "blurred": 0
+    },
+    "video": "ko-1440-scroll.webm",
+    "layout": {
+      "vw": 1440,
+      "clientW": 1440,
+      "scrollW": 1440,
+      "bodyL": 32,
+      "bodyR": 687,
+      "bodyW": 721,
+      "fontSize": "24px",
+      "lineHeight": "43.2px",
+      "h1": "Ultrawork Manifesto",
+      "bodyBg": "rgb(10, 10, 10)",
+      "htmlClass": "dark geistsans_d5a4f12f-module__Ur3q_a__variable geistmono_157ca88a-module__iaM1Ya__variable"
+    },
+    "scan": {
+      "positions": 45,
+      "minOpacity": 1,
+      "frontierMin": 0.6225347222222222,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAPositions": 0,
+      "belowAAMax": 0,
+      "split": 0,
+      "positionsWithSplit": 0,
+      "splitSamples": [],
+      "upperUnlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "partialLines": 37,
+      "gradientLines": 36,
+      "violationSamples": []
+    },
+    "shots": [
+      {
+        "file": "ko-1440-transition1.png",
+        "clipFile": "ko-1440-transition1-zoom.png",
+        "y": 2277,
+        "partial": 8,
+        "sample": "당신과=0.97 같은=0.85 정보가=0.77 있어도,=0.66 더=0.53 많은=0.48 정보를=0.40 보아도,=0.29"
+      },
+      {
+        "file": "ko-1440-transition2.png",
+        "clipFile": "ko-1440-transition2-zoom.png",
+        "y": 396,
+        "partial": 7,
+        "sample": "우리는=1.00 컴퓨터=1.00 앞에서=1.00 매일=0.97 키보드와=0.89 마우스를=0.74 만지고=0.58 같은=0.47 작업을=0.38 하지만,=0.27"
+      }
+    ],
+    "end": {
+      "minOpacity": 1,
+      "frontierFrac": 1,
+      "floorCount": 0,
+      "floorColors": [],
+      "split": 0,
+      "splitSample": "",
+      "minContrast": 18.27202784024654,
+      "belowAA": 0,
+      "count": 3,
+      "upper": 3,
+      "upperUnlit": 0,
+      "unlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "violationSamples": [],
+      "partialLines": 0,
+      "gradientLines": 0,
+      "modes": "observer",
+      "y": 4396
+    }
+  },
+  "normal-ko-1920": {
+    "motion": {
+      "samples": 90,
+      "minOpacity": 1,
+      "frontierMin": 0.6201388888888889,
+      "frontierMinAfterStart": 0.6435329861111111,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)",
+        "oklab(0.642944 0.00256125 -0.0130787)",
+        "oklab(0.642665 0.00256276 -0.0130877)",
+        "oklab(0.642612 0.00256305 -0.0130894)",
+        "oklab(0.643119 0.00256031 -0.013073)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAMax": 0,
+      "splitMax": 0,
+      "samplesWithSplit": 0,
+      "splitSample": "",
+      "upperUnlitMax": 0,
+      "stripes": 0,
+      "violations": 0,
+      "gradientLines": 85,
+      "blurred": 0
+    },
+    "video": "ko-1920-scroll.webm",
+    "layout": {
+      "vw": 1920,
+      "clientW": 1920,
+      "scrollW": 1920,
+      "bodyL": 272,
+      "bodyR": 927,
+      "bodyW": 721,
+      "fontSize": "24px",
+      "lineHeight": "43.2px",
+      "h1": "Ultrawork Manifesto",
+      "bodyBg": "rgb(10, 10, 10)",
+      "htmlClass": "dark geistsans_d5a4f12f-module__Ur3q_a__variable geistmono_157ca88a-module__iaM1Ya__variable"
+    },
+    "scan": {
+      "positions": 36,
+      "minOpacity": 1,
+      "frontierMin": 0.6478298611111111,
+      "floorColors": [
+        "oklab(0.642146 0.00256556 -0.0131044)",
+        "oklab(0.64284 0.00256181 -0.013082)"
+      ],
+      "minContrast": 5.952513028045783,
+      "belowAAPositions": 0,
+      "belowAAMax": 0,
+      "split": 0,
+      "positionsWithSplit": 0,
+      "splitSamples": [],
+      "upperUnlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "partialLines": 28,
+      "gradientLines": 28,
+      "violationSamples": []
+    },
+    "shots": [
+      {
+        "file": "ko-1920-transition1.png",
+        "clipFile": "ko-1920-transition1-zoom.png",
+        "y": 2142,
+        "partial": 8,
+        "sample": "당신과=0.79 같은=0.67 정보가=0.59 있어도,=0.47 더=0.34 많은=0.30 정보를=0.22 보아도,=0.10"
+      },
+      {
+        "file": "ko-1920-transition2.png",
+        "clipFile": "ko-1920-transition2-zoom.png",
+        "y": 3451,
+        "partial": 7,
+        "sample": "우리는=0.98 그때=0.86 당신이=0.78 또다시=0.66 집중할=0.54 수=0.42 있도록=0.38"
+      }
+    ],
+    "end": {
+      "minOpacity": 1,
+      "frontierFrac": 1,
+      "floorCount": 0,
+      "floorColors": [],
+      "split": 0,
+      "splitSample": "",
+      "minContrast": 18.27202784024654,
+      "belowAA": 0,
+      "count": 7,
+      "upper": 7,
+      "upperUnlit": 0,
+      "unlit": 0,
+      "blurred": 0,
+      "stripes": 0,
+      "violations": 0,
+      "violationSamples": [],
+      "partialLines": 0,
+      "gradientLines": 0,
+      "modes": "observer",
+      "y": 4216
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "en-375": {
+    "maxY": 4916,
+    "specFinalPosition": {
+      "y": 4880,
+      "found": null,
+      "assertionWouldPass": "skipped (null)"
+    },
+    "midPage": {
+      "y": 1966,
+      "found": {
+        "color": "oklab(0.642146 0.00256556 -0.0131044)",
+        "opacity": "1"
+      },
+      "assertionWouldPass": false
+    }
+  },
+  "en-1280": {
+    "maxY": 4717,
+    "specFinalPosition": {
+      "y": 4640,
+      "found": null,
+      "assertionWouldPass": "skipped (null)"
+    },
+    "midPage": {
+      "y": 1887,
+      "found": {
+        "color": "oklab(0.642146 0.00256556 -0.0131044)",
+        "opacity": "1"
+      },
+      "assertionWouldPass": false
+    }
+  },
+  "ko-375": {
+    "maxY": 4393,
+    "specFinalPosition": {
+      "y": 4280,
+      "found": null,
+      "assertionWouldPass": "skipped (null)"
+    },
+    "midPage": {
+      "y": 1757,
+      "found": {
+        "color": "oklab(0.642146 0.00256556 -0.0131044)",
+        "opacity": "1"
+      },
+      "assertionWouldPass": false
+    }
+  },
+  "ko-1280": {
+    "maxY": 4381,
+    "specFinalPosition": {
+      "y": 4280,
+      "found": null,
+      "assertionWouldPass": "skipped (null)"
+    },
+    "midPage": {
+      "y": 1752,
+      "found": {
+        "color": "oklab(0.642146 0.00256556 -0.0131044)",
+        "opacity": "1"
+      },
+      "assertionWouldPass": false
+    }
+  }
+}
