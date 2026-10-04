@@ -13,6 +13,7 @@ import {
   type OpenedHostSession,
 } from "./session-client"
 import { buildChildContext } from "./session-context"
+import { childRetryFallbackProfile } from "../retry-fallback-profile"
 import type { HostRetryFallbackProfile, HostSessionOpenInput } from "./session-transport"
 
 const SESSION_FAILURE_REASONS = new Set<TaskStartFailureReason>(SESSION_START_FAILURE_REASONS)
@@ -62,14 +63,10 @@ function sessionFailureReason(error: unknown): TaskStartFailureReason | undefine
   return undefined
 }
 
-/**
- * The child's own fallback chain after its model, when it has one. A child without a chain sends no
- * profile, so the host keeps applying the fallback the user's settings give that session.
- */
+/** A child without a chain sends no profile, so the host keeps applying its own settings' fallback. */
 function childRetryFallback(spec: RpcRunnerSpec): { readonly retryFallback?: HostRetryFallbackProfile } {
-  const chain = spec.fallbackModels ?? []
-  if (spec.model === undefined || chain.length === 0) return {}
-  return { retryFallback: { modelFallback: true, fallbackChains: { [spec.model]: [...chain] } } }
+  const retryFallback = childRetryFallbackProfile(spec)
+  return retryFallback === undefined ? {} : { retryFallback }
 }
 
 function splitModelRef(model: string | undefined): { readonly provider: string; readonly modelId: string } | undefined {

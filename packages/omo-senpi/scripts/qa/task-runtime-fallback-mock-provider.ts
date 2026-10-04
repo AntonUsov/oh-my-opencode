@@ -82,6 +82,12 @@ const LIMIT_ERRORS: Readonly<Record<string, string>> = {
 // the request that carries the tool result, so the fallback has to happen inside the running turn.
 const LIMIT_AFTER_TOOL = "limit-after-tool"
 const LIMIT_AFTER_TOOL_ERROR = "You've hit your session limit · resets 3pm (Asia/Seoul)"
+// "limit-near-compaction" (#9582): the same tool-then-limit turn, but the tool-call response reports a
+// context near the compaction threshold of a small window, so the engine compacts before it retries. A
+// pre-retry compaction runs on the CURRENT model, which is spent: the child must still reach its fallback.
+const LIMIT_NEAR_COMPACTION = "limit-near-compaction"
+const NEAR_COMPACTION_WINDOW = 40_000
+const NEAR_COMPACTION_INPUT = 36_000
 let parentCalls = 0
 
 export default function registerFallbackMockProvider(pi: ExtensionAPI): void {
@@ -97,6 +103,7 @@ export default function registerFallbackMockProvider(pi: ExtensionAPI): void {
       mockModel("limit-fable", "Usage-limited primary"),
       mockModel("limit-opus", "Same-account sibling"),
       mockModel("limit-after-tool", "Primary limited after a tool call"),
+      { ...mockModel(LIMIT_NEAR_COMPACTION, "Primary limited near the compaction threshold"), contextWindow: NEAR_COMPACTION_WINDOW },
     ],
     streamSimple(model, context) {
       if (isChild(context)) {
@@ -111,7 +118,9 @@ export default function registerFallbackMockProvider(pi: ExtensionAPI): void {
             arguments: {
               category: SCENARIO === "user-fallback"
                 ? "fallbackcat"
-                : SCENARIO === LIMIT_AFTER_TOOL ? "toolcat" : SCENARIO in LIMIT_ERRORS ? "limitcat" : "quick",
+                : SCENARIO === LIMIT_AFTER_TOOL || SCENARIO === LIMIT_NEAR_COMPACTION
+                  ? "toolcat"
+                  : SCENARIO in LIMIT_ERRORS ? "limitcat" : "quick",
               prompt: "complete through the configured fallback chain",
               run_in_background: false,
               name: "fallback-child",
@@ -176,6 +185,19 @@ export default function registerFallbackMockProvider(pi: ExtensionAPI): void {
 }
 
 function childReply(modelId: string, context: Context): AssistantMessage {
+  if (SCENARIO === LIMIT_NEAR_COMPACTION && modelId === LIMIT_NEAR_COMPACTION) {
+    return hasToolResult(context)
+      ? assistant(modelId, "error", [], LIMIT_AFTER_TOOL_ERROR)
+      : {
+          ...assistant(modelId, "toolUse", [{
+            type: "toolCall",
+            id: "limit-near-compaction-call",
+            name: "bash",
+            arguments: { command: "printf limit-near-compaction-ran" },
+          }]),
+          usage: { input: NEAR_COMPACTION_INPUT, output: 40, cacheRead: 0, cacheWrite: 0, totalTokens: NEAR_COMPACTION_INPUT + 40, cost: 0 },
+        }
+  }
   if (SCENARIO === LIMIT_AFTER_TOOL && modelId === LIMIT_AFTER_TOOL) {
     return hasToolResult(context)
       ? assistant(modelId, "error", [], LIMIT_AFTER_TOOL_ERROR)

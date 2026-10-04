@@ -3,6 +3,7 @@ import { log } from "@oh-my-opencode/utils"
 
 import type { RpcChildHandle, RpcRunnerSpec } from "./types"
 import { RunnerError } from "./in-process/runner-error"
+import { childRetryFallbackProfile } from "./retry-fallback-profile"
 import { createRpcChildHandle } from "./rpc/handle"
 import { createRpcModelAdmission, type RpcModelAdmission } from "./rpc/model-admission"
 import { type MalformedLineHandler, RpcProtocolClient } from "./rpc/protocol-client"
@@ -10,6 +11,8 @@ import { type RpcSpawnDescriptor, buildRpcSpawn } from "./rpc/spawn"
 import { discardUnstartedRpcHandle } from "./rpc/start-cleanup"
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000
+/** senpi capability: a single-session `--mode rpc` process accepts `set_retry_fallback` before its first turn. */
+const RETRY_FALLBACK_COMMAND_CAPABILITY = "retry_fallback_command"
 
 export type RpcProcessRunnerOptions = {
   readonly spawnChild?: (descriptor: RpcSpawnDescriptor) => ChildProcess
@@ -22,7 +25,8 @@ export type RpcProcessRunnerOptions = {
   // The parent's `-e` extension entries, forwarded to every child so a detached process reproduces the
   // parent's extensions. Applied only when a spec does not already carry its own extensions.
   readonly inheritedExtensions?: readonly string[]
-  // Told once when a child's fallback models cannot reach its process (#9512).
+  // Told once when a child's fallback models cannot reach its process: an engine without
+  // `retry_fallback_command` (#9582).
   readonly onWarning?: (message: string) => void | (() => void)
 }
 
@@ -62,7 +66,6 @@ export class RpcProcessRunner {
         ? { ...specInput, extensions: this.inheritedExtensions }
         : specInput
     await this.modelAdmission(spec)
-    this.noticeFallbackChainUnsupported(spec)
     const descriptor = this.buildSpawn(spec)
     const child = this.spawnChild(descriptor)
     const client = new RpcProtocolClient({ child, onMalformedLine: this.onMalformedLine })
@@ -74,8 +77,12 @@ export class RpcProcessRunner {
       now: this.now,
       childEnv: descriptor.env,
     })
-    const resume = spec.resumeSessionPath === undefined ? undefined : client.switchSession(spec.resumeSessionPath)
+    let resume: ReturnType<RpcProtocolClient["switchSession"]> | undefined
     try {
+      // The chain is a launch-time setting: senpi refuses it once the session has a turn, so it goes before
+      // the resumed session is switched in and before the first prompt.
+      await this.applyFallbackChain(client, spec)
+      resume = spec.resumeSessionPath === undefined ? undefined : client.switchSession(spec.resumeSessionPath)
       if (resume === undefined) {
         await handle.startInitialPrompt(spec.prompt)
       } else {
@@ -94,7 +101,7 @@ export class RpcProcessRunner {
       // A child that died before its first prompt leaves its cause ONLY here: the classified exit is
       // otherwise folded into `message`, which is stderr-derived and gets sanitized away downstream.
       throw new RunnerError({
-        kind: resume === undefined ? "child-prompt-failed" : "session_unavailable",
+        kind: spec.resumeSessionPath === undefined ? "child-prompt-failed" : "session_unavailable",
         message,
         cause: error,
         rejected_while: exitOutcome === undefined ? "alive" : "exited",
@@ -117,17 +124,37 @@ export class RpcProcessRunner {
     })
   }
 
-  // A separate `senpi --mode rpc` process has no way to receive an in-memory fallback chain. The manager
-  // still walks the chain when a turn fails before any tool call (#tryRuntimeFallback); what is lost is
-  // the in-session hop after a tool call. Say so once rather than drop it silently.
-  private noticeFallbackChainUnsupported(spec: RpcRunnerSpec): void {
-    if (this.fallbackChainUnsupportedNoticed || (spec.fallbackModels ?? []).length === 0) return
+  // The child's own chain reaches its process as `set_retry_fallback`, held in memory there and never
+  // written to a settings file (#9582). An engine without the command keeps the manager's fallback before
+  // any tool call; the in-session switch after a tool call is what it loses, so say so once.
+  private async applyFallbackChain(client: RpcProtocolClient, spec: RpcRunnerSpec): Promise<void> {
+    const retryFallback = childRetryFallbackProfile(spec)
+    if (retryFallback === undefined) return
+    if (!(await engineAcceptsFallbackChain(client))) {
+      this.noticeFallbackChainUnsupported()
+      return
+    }
+    // `set_retry_fallback` is newer than the senpi this package pins its RpcCommand type from.
+    const command = { type: "set_retry_fallback", retryFallback } as unknown as Parameters<RpcProtocolClient["send"]>[0]
+    const response = await client.send(command)
+    if (!response.success) throw new Error(`set_retry_fallback refused: ${response.error}`)
+  }
+
+  private noticeFallbackChainUnsupported(): void {
+    if (this.fallbackChainUnsupportedNoticed) return
     this.fallbackChainUnsupportedNoticed = true
     this.onWarning(
-      "task children started as their own process switch to their fallback models only when a turn " +
-        "fails before any tool call; after a tool call they fall back only through your senpi settings",
+      "this senpi engine cannot take a task child's fallback chain (no retry_fallback_command), so children " +
+        "started as their own process switch to their fallback models only when a turn fails before any tool call",
     )
   }
+}
+
+async function engineAcceptsFallbackChain(client: RpcProtocolClient): Promise<boolean> {
+  const response = await client.send({ type: "get_protocol_info" })
+  if (!response.success || response.command !== "get_protocol_info") return false
+  const capabilities = (response.data as { readonly capabilities?: unknown }).capabilities
+  return Array.isArray(capabilities) && capabilities.includes(RETRY_FALLBACK_COMMAND_CAPABILITY)
 }
 
 function defaultSpawnChild(

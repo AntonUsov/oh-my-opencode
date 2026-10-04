@@ -1,3 +1,12 @@
+## 2026-10-05 - Live fallback QA covers process children and a turn near compaction (#9582)
+
+`scripts/qa/task-runtime-fallback-e2e.mjs`:
+- `limit-after-tool` now requires the tool call before the in-session hop on every process runner. The child-process `N/A` is gone now that a process child carries its own chain.
+- New scenario `limit-near-compaction`: the same tool-then-limit turn, but the tool-call response reports a context near the compaction threshold of a 40K window. The engine's pre-retry compaction therefore runs on the spent model first, and the child must still end on its fallback model with the settings file byte-identical.
+- The driver runs on Windows too: the process table comes from the CIM process list instead of `ps`/`pgrep`, and `senpi` resolves through PATHEXT.
+
+`task-runtime-fallback-mock-provider.ts` serves the new model. `task-runtime-fallback-e2e.windows.test.ts` runs the child-process runner through `user-fallback`, `limit-after-tool` and `limit-near-compaction` on Windows, where every task child is a process child.
+
 ## 2026-10-05 - An idle gateway store no longer keeps its worker thread alive
 
 Every session that touches the gateway store (each terminal with a control endpoint, and every sender) started one store worker thread and kept it until the session ended. A measured idle worker retains 2.94 MB: an empty Bun worker plus the bundled store code and SQLite. That put the terminal control endpoint's idle cost at about 4.1 MB against the 3 MB budget.
