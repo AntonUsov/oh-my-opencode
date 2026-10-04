@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { join } from "node:path"
 import { realpathSync, symlinkSync } from "node:fs"
-import { createReadTool } from "@code-yeongyu/senpi"
+import { readFile } from "node:fs/promises"
 import { GitMemoryRepo, resolveMemoryIdentity, renderMemoryFile } from "@oh-my-opencode/memory-core"
 
 import { createMemoryBinding } from "../memory/binding"
@@ -83,11 +83,10 @@ test("#given two scopes in one workspace #when learning is read through the work
   const pi = new PolicyCapturingFakeExtensionAPI()
   const denied = [join(f.env.OMO_MEMORY_HOME, "agents"), join(f.env.OMO_MEMORY_HOME, "gateway-scopes")]
   registerMemoryGuard(pi, componentContext(), { getContext: () => context, resolveCwd: () => f.workspace, readRepoFor: (session) => gatewayReadRepo(access, session, f.workspace), additionalDeniedRoots: denied })
-  const read = createReadTool(f.workspace)
   const readAs = async (session: string, path = target) => {
     const verdicts = await pi.dispatch("tool_call", { toolName: "read", input: { path } }, f.context(session))
     if (verdicts.some((value) => value !== null && typeof value === "object" && Reflect.get(value, "block") === true)) return { kind: "refused" }
-    return { kind: "read", result: await read.execute("read", { path }) }
+    return { kind: "read", text: await readFile(path, "utf8") }
   }
   expect((await readAs("A-worker")).kind).toBe("read")
   expect((await readAs("B-worker")).kind).toBe("refused")
