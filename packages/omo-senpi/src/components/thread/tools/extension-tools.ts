@@ -15,17 +15,14 @@ import { UNKNOWN_CALLER, type ThreadHostView, type ThreadToolSurfaceOptions } fr
 type ExtensionToolOutput = AgentToolResult<{ readonly result: StoreExtensionResult<unknown> }>
 
 /**
- * The durable id of the engine's caller: the address book entry whose durable id it is, else the one
- * live entry whose endpoint routes it. An absent identity, an unknown id or an ambiguous routing id
- * resolves to nothing.
+ * The durable id of the engine's caller, the lookup `self` uses: the engine's `getSessionId()` IS the
+ * session's durable id, so it resolves only to the address book entry with exactly that durable id.
+ * A routing id (`rpc-<n>`, a per-process counter that repeats across hosts) never resolves, nor does
+ * an absent or unknown identity: the caller fails closed as `caller_context_missing`.
  */
 export function resolveCallerDurableId(options: Omit<ThreadToolSurfaceOptions, "store">, view: ThreadHostView, runtimeId: string): string | undefined {
   if (runtimeId.length === 0 || runtimeId === UNKNOWN_CALLER) return undefined
-  const book = addressBook(options, view)
-  const exact = book.find((entry) => entry.durable_id === runtimeId)
-  if (exact !== undefined) return exact.durable_id
-  const routed = book.filter((entry) => entry.alive && entry.endpoint?.routing_id === runtimeId)
-  return routed.length === 1 ? routed[0]?.durable_id : undefined
+  return addressBook(options, view).find((entry) => entry.durable_id === runtimeId)?.durable_id
 }
 
 function runtimeIdOf(options: ThreadToolSurfaceOptions, ectx: unknown): string {

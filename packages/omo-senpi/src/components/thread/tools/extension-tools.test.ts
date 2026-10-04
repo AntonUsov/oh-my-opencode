@@ -135,10 +135,26 @@ test("#given declarations named bash and task, one composing a name the session 
   expect(host.tools.get("bash")).toBe(core.bash)
 }, 10_000)
 
-test("#given an engine caller with a known runtime id #when the tool runs #then the op receives that caller's DURABLE id", async () => {
+test("#given the production shape (the engine's getSessionId() is the caller's durable id) #when the tool runs #then the op receives that durable id", async () => {
   const { tools } = await surface([caller])
-  const output = await tools[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("route-caller") as never)
+  const output = await tools[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("dur-caller") as never)
   expect(resultOf(output)).toMatchObject({ kind: "ok", value: { received: { caller_session_durable_id: "dur-caller" } } })
+})
+
+const onHost = (socket: string, sessions: ThreadHostSession[]) => ({ socket, list_sessions: { sessions } })
+const onOtherHost = { sessionId: "rpc-1", durableSessionId: "dur-other", cwd: process.cwd(), name: "other", status: "open" as const }
+const onThirdHost = { sessionId: "rpc-1", durableSessionId: "dur-third", cwd: process.cwd(), name: "third", status: "open" as const }
+
+test.each([
+  ["the caller's own host is unreachable and one other host lists a live rpc-1", [{ socket: "/tmp/caller-host.sock", error: new Error("unreachable") }, onHost("/tmp/other-host.sock", [onOtherHost])]],
+  ["two hosts each list a live rpc-1 with a different durable id", [onHost("/tmp/other-host.sock", [onOtherHost]), onHost("/tmp/third-host.sock", [onThirdHost])]],
+])("#given %s #when the engine names the caller by the routing id rpc-1 #then it resolves to no session and the tool answers caller_context_missing", async (_label, hosts) => {
+  const { store, tools } = await surface([caller])
+  const view = { sessions: hosts.flatMap((host) => ("list_sessions" in host ? host.list_sessions.sessions : [])), hosts, disk: [] }
+  const routed = await buildExtensionTools({ host: { ...hostWith([]), listView: async () => view }, store, stateDirectory: tempDir("extension-tools-routing-"), callerSessionId: () => "UNKNOWN_CALLER", callerWorkspaceRoot: () => process.cwd() })
+  expect(tools.map((tool) => tool.name)).toEqual(routed.map((tool) => tool.name))
+  const output = await routed[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("rpc-1") as never)
+  expect(resultOf(output)).toMatchObject({ kind: "refused", code: "caller_context_missing" })
 })
 
 test.each([
@@ -152,7 +168,7 @@ test.each([
 
 test("#given args that try to name the caller #when the tool runs #then it is refused before validation and the op never runs", async () => {
   const { tools } = await surface([caller])
-  const output = await tools[0].execute("call-1", { target_session_durable_id: "dur-child", caller_session_durable_id: "dur-lead" }, undefined, undefined, ectxFor("route-caller") as never)
+  const output = await tools[0].execute("call-1", { target_session_durable_id: "dur-child", caller_session_durable_id: "dur-lead" }, undefined, undefined, ectxFor("dur-caller") as never)
   expect(resultOf(output)).toMatchObject({ code: "invalid_arguments" })
 })
 
@@ -163,7 +179,7 @@ test("#given a declaration whose module was deleted #when a session builds its t
   const { tools } = await surface([caller], `file://${gone}`)
   rmSync(gone)
   expect(tools.map((tool) => tool.name)).toEqual(["ext_gw_open"])
-  const output = await tools[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("route-caller") as never)
+  const output = await tools[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("dur-caller") as never)
   expect(resultOf(output)).toMatchObject({ code: "extension_import_failed" })
 })
 
@@ -175,10 +191,10 @@ test("#given the caller creates a child with thread_create #when it opens a thre
   const threadTools = createThreadTools({ host, store, stateDirectory: tempDir("extension-tools-create-"), callerSessionId: () => "UNKNOWN_CALLER", callerWorkspaceRoot: () => process.cwd() })
   sessions.push(child)
   const create = threadTools.find((tool) => tool.name === "thread_create")!
-  expect(resultOf(await create.execute("call-c", { name: "new-child" }, undefined, undefined, ectxFor("route-caller") as never))).toMatchObject({ kind: "ok" })
-  const own = resultOf(await tools[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("route-caller") as never))
+  expect(resultOf(await create.execute("call-c", { name: "new-child" }, undefined, undefined, ectxFor("dur-caller") as never))).toMatchObject({ kind: "ok" })
+  const own = resultOf(await tools[0].execute("call-1", { target_session_durable_id: "dur-child" }, undefined, undefined, ectxFor("dur-caller") as never))
   expect(own.value?.received).toMatchObject({ caller_created_target: true })
-  const other = resultOf(await tools[0].execute("call-2", { target_session_durable_id: "dur-peer" }, undefined, undefined, ectxFor("route-caller") as never))
+  const other = resultOf(await tools[0].execute("call-2", { target_session_durable_id: "dur-peer" }, undefined, undefined, ectxFor("dur-caller") as never))
   expect(Object.hasOwn(other.value?.received ?? {}, "caller_created_target")).toBe(false)
 })
 
