@@ -14,6 +14,7 @@ import { type RpcStreamingBehavior, isBusyChildRejection } from "./delivery-sema
 import { RpcCommandError } from "./errors"
 import { recordTaskChildDeath } from "./crash-record"
 import { classifyChildExit } from "./exit-mapping"
+import { createHandleListeners } from "../rpc-host/handle-listeners"
 import { isHarmlessRpcShutdownError, type RpcProtocolClient } from "./protocol-client"
 import { terminateRpcChild } from "./terminate"
 import { exitTurnOutcome, extractAssistantText, promptFailureOutcome } from "./turn-outcome"
@@ -75,6 +76,12 @@ export function createRpcChildHandle(options: CreateRpcChildHandleOptions): Trac
   })
 
   const resumedListeners = new Set<() => void>()
+  // A child can run its whole first turn (a tool call and an in-session fallback hop included) before
+  // `start` returns and the manager subscribes; those events are kept for the first observers (#9582).
+  const listeners = createHandleListeners({
+    onListenerError: (error) => log("senpi-task rpc child event listener failed", { taskId, error: String(error) }),
+  })
+  client.onEvent((event) => listeners.emitEvent(event))
   client.onEvent((event) => {
     // A run the child starts on its own after its turn settled (a monitor or background job woke it)
     // is a new turn: the next outcome is that run's, never the settled one again (omo#9069).
@@ -195,7 +202,10 @@ export function createRpcChildHandle(options: CreateRpcChildHandleOptions): Trac
       abortedByUser = true
       return runCommand({ type: "abort" }, "abort")
     },
-    subscribe: (listener: ChildEventListener) => client.onEvent(listener),
+    subscribe: (listener: ChildEventListener) => {
+      const unsubscribe = listeners.registrations.subscribe(listener)
+      return () => void unsubscribe()
+    },
     subscribeExtensionEvents: client.extensionEvents.subscribe,
     adoptFinishedTurn: async (finalResponse) => {
       if (turnOutcome !== undefined || settlement.pending() !== undefined) return
@@ -224,6 +234,7 @@ export function createRpcChildHandle(options: CreateRpcChildHandleOptions): Trac
     waitForExit: () => (outcome ? Promise.resolve(outcome) : new Promise<ChildExitOutcome>((resolve) => exitWaiters.push(resolve))),
     dispose: async () => {
       clearInterval(heartbeat)
+      listeners.clearActive()
       try {
         await client.detach()
       } catch (error) {
