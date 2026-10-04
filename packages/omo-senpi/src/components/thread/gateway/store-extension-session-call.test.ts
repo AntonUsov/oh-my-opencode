@@ -119,7 +119,7 @@ test("#given a recorded creation #when the store reopens (host restart) #then th
   const first = h.store()
   await first.registerStoreExtension(registration())
   await first.recordThreadCreation({ creator_durable_id: "caller", created_durable_id: "child" })
-  await first.close()
+  await first.dispose()
   const second = h.store()
   const result = await second.extensionSessionCall("gw", "openThread", { target_session_durable_id: "child" }, { callerDurableId: "caller" })
   expect(opened(result).caller_created_target).toBe(true)
