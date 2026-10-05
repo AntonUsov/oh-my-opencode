@@ -46,6 +46,7 @@ describe("omo-senpi ultrawork once-per-session arming", () => {
       "[REPORT] lane | milestone | the executor armed ulw from its brief; mass ulw research is the common phrasing",
       "[gh-feed -> lane] the ulw-execute PR landed",
       "Lead (main), lane: your report quoted ulw and armed my session",
+      "Lead (main) to duty: the lane quoted mass ulw research in its report",
       "the bug: a message that says \"please ulw this\" arms the directive",
       "> ulw research the market\nwhat do you think of this request?",
     ]) {

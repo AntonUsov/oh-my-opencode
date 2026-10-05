@@ -57,6 +57,7 @@ describe("omo-senpi skill-pointers suppression", () => {
       for (const text of [
         "[REPORT] lane | filed | an executor quoted mass ulw research and ulw-loop",
         "Lead (main), lane: your report mentioned ulw-research and mass-ulw",
+        "Lead (main) to duty: the lane relayed ulw-loop and mass ulw research",
         "they typed \u201Cmass ulw research the market\u201D and it armed",
         "> ulw-loop the migration\nshould this have armed?",
       ]) {

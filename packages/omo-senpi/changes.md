@@ -1,7 +1,7 @@
 ## 2026-10-05 - A relayed report or a quoted mention no longer arms ultrawork or skill pointers (#9600)
 
 `skill-pointers/strip-quoted-regions.ts`, the masking that both `ultrawork` and `skill-pointers` run before they look for a keyword, now also hides text that is someone else's:
-- **A relayed message:** one that opens with a sender header is masked whole. The header is a bracketed tag such as `[REPORT]` or `[a -> b]`, or `Name (id), recipient:`. A report pasted into a root session that describes a bug and so mentions `ulw`, `mass ulw` or a skill name used to arm the directive and inject pointers there.
+- **A relayed message:** one that opens with a sender header is masked whole. The header is a bracketed tag such as `[REPORT]` or `[a -> b]`, or `Name (id), recipient:` / `Name (id) to recipient:`. A report pasted into a root session that describes a bug and so mentions `ulw`, `mass ulw` or a skill name used to arm the directive and inject pointers there.
 - **A Markdown block-quote line** (`> ...`).
 - **A span inside straight or curly double quotes** on one line.
 
