@@ -504,8 +504,8 @@ jobs:
           # rejects the release commit as stale (v5.0.0-beta.83 release-state PR).
           bun run build:codex-install
 
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
+          git config --global user.email "code.yeon.gyu@gmail.com"
+          git config --global user.name "YeonGyu-Kim"
           git add CHANGELOG.md package.json packages/omo-native/package.json packages/oh-my-opencode-*/package.json packages/omo-senpi/package.json packages/omo-senpi/plugin/package.json packages/omo-codex/package.json packages/omo-codex/plugin/package.json packages/omo-codex/plugin/package-lock.json packages/omo-codex/plugin/.codex-plugin/plugin.json packages/omo-codex/plugin/components/*/package.json packages/omo-codex/plugin/hooks/*.json packages/omo-codex/plugin/components/*/hooks/hooks.json bun.lock
           # build-extension.mjs also rewrites the committed bundles under plugin/runtime (the
           # agent-toolkit SDK, the rollback migrator); commit every tracked one it touched or the
@@ -1189,8 +1189,8 @@ jobs:
           bun run --cwd packages/omo-codex/plugin build
           bun run script/sync-lazycodex-marketplace.ts "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/lazycodex-marketplace"
           cd "$GITHUB_WORKSPACE/lazycodex-marketplace"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
+          git config --global user.email "code.yeon.gyu@gmail.com"
+          git config --global user.name "YeonGyu-Kim"
           git add .agents/plugins/marketplace.json .github/workflows/pr-source-guidance.yml plugins/omo
           if git diff --cached --quiet; then
             echo "LazyCodex marketplace already up to date"
