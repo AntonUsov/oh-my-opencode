@@ -8,6 +8,7 @@ import { modelProfileChoice } from "./model-control"
 import { createCompletionTracker, type AgentEndFacts } from "./gateway/completion"
 import { SESSION_CONTROL_DELIVERY_TYPE } from "./gateway/constants"
 import { gatewayDatabasePath } from "./gateway/paths"
+import { registerInitialSkills } from "./initial-skills"
 import { controlSessionOf, createControlEndpointRegistrant, hostInstanceOf, sessionControlOf, type ControlEndpointRegistrantOptions, type SessionControlActionsPort } from "./gateway/registration"
 import type { ModelRef, ModelSelectSource } from "./gateway/session-models"
 import { createGatewayStore, type GatewayStore } from "./gateway/store"
@@ -243,6 +244,7 @@ function registerControlEndpoint(pi: SenpiExtensionAPI, ctx: ComponentContext, o
     if (session === undefined) return
     void registrant.start(session).catch((error: unknown) => ctx.logger.warn(`thread gateway: control endpoint registration failed: ${error instanceof Error ? error.message : String(error)}`))
   })
+  registerInitialSkills(pi, ctx)
   pi.on("session_before_compact", () => registrant.noteCompaction(true))
   pi.on("session_compact", () => registrant.noteCompaction(false))
   // A steer into a session waiting on a question is `not_steerable` (`decision.ts`): the answer comes

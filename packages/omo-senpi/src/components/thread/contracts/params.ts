@@ -61,6 +61,13 @@ export const ThreadCreateParams = Type.Object({
       { description: "Thinking level the new thread starts at; a level the chosen model cannot run returns thinking_level_unsupported with the supported list." },
     ),
   ),
+  skills: Type.Optional(
+    Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
+      minItems: 1,
+      maxItems: 16,
+      description: "Names of installed skills the new thread follows from its first turn, as if each were loaded with /skill; a name no installed skill has refuses the create and nothing is created. The result's thread.skills lists the skills attached.",
+    }),
+  ),
   idempotency_key: IdempotencyKey,
 })
 
