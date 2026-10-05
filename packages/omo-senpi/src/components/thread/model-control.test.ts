@@ -494,7 +494,14 @@ function engineFixture() {
     disposables.push(sdk)
     return { sdk, beforeStateReply: (wait: () => Promise<void>) => { hold = { wait, armed: false } } }
   }
-  return { engine, admission, userSwitch, runtimeSwitch, providerError, settle, observed, bindMilestones, rows, recorded, record, sharedSdk, store }
+  /** The session starts (or an extension reload re-runs the start inside the live session). */
+  const start = (reason: "startup" | "resume" | "reload") => deliver({ type: "session_start", reason } as { readonly type: string })
+  /** The engine applies a held switch and refuses it (_applyPendingModelSwitch: the hold is cleared, the refusal recorded, no model_select). */
+  const refuseHeld = (model: EngineModel) => {
+    Object.assign(engine, { _pendingModelSwitch: undefined })
+    ;(engine as unknown as { _recordRejectedModelChange: (model: EngineModel, error: Error) => void })._recordRejectedModelChange(model, new Error("the live context still does not fit the held model"))
+  }
+  return { engine, admission, userSwitch, runtimeSwitch, providerError, settle, observed, bindMilestones, rows, recorded, record, sharedSdk, store, start, refuseHeld, durableId }
 }
 
 type GatewayStoreModel = Parameters<GatewayStore["recordSessionModel"]>[0]["model"]
@@ -925,6 +932,67 @@ describe("#9429 the command path and the session's own observer share one store"
     await e.settle()
     await landed
     expect(e.engine.model).toMatchObject(GPT_Y)
+    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "lead" })
+  })
+
+  test("#given a held set-model --set-by lead #when the engine refuses the hold at apply time and the user later picks that model himself #then the pick is the user's, not the lead's", async () => {
+    const e = engineFixture()
+    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })
+    e.admission.hold = true
+    expect(await e.sharedSdk().sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "lead" })).toMatchObject({ kind: "ok", pending: GPT_Y })
+    await e.settle()
+    e.refuseHeld(GPT_Y_MODEL)
+    await e.settle()
+    e.admission.hold = false
+    const picked = e.observed()
+    await e.userSwitch(GPT_Y_MODEL)
+    await e.settle()
+    await picked
+    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "user" })
+  })
+
+  test("#given a choice noted again by a set-model after an earlier hold ended #when the end of that earlier hold is processed late #then the newer choice is kept and its landing stays the lead's", async () => {
+    const e = engineFixture()
+    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })
+    const ended = Date.now() - 60_000
+    await e.store.recordPendingSessionModel({ now: ended - 1_000, durable_id: e.durableId, provider: "openai", id: "gpt-y", set_by: "config" })
+    await e.store.recordPendingSessionModel({ now: ended + 1_000, durable_id: e.durableId, provider: "openai", id: "gpt-y", set_by: "lead" })
+    expect(await e.store.dropHeldChoice({ durable_id: e.durableId, before: ended, model: { provider: "openai", id: "gpt-y" } })).toBe(false)
+    const landed = e.observed()
+    await e.engine._switchActiveModel(GPT_Y_MODEL, { persistDefault: false, appendSessionEntry: true, emitModelSelect: true, modelSelectSource: "set", invalidateCompaction: true, allowDeferral: false })
+    await e.settle()
+    await landed
+    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "lead" })
+  })
+
+  test("#given a held set-model --set-by lead #when the session starts again (the in-memory hold is gone) and the user then picks that model #then the pick is the user's", async () => {
+    const e = engineFixture()
+    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })
+    e.admission.hold = true
+    expect(await e.sharedSdk().sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "lead" })).toMatchObject({ kind: "ok", pending: GPT_Y })
+    await e.settle()
+    Object.assign(e.engine, { _pendingModelSwitch: undefined })
+    await e.start("resume")
+    e.admission.hold = false
+    const picked = e.observed()
+    await e.userSwitch(GPT_Y_MODEL)
+    await e.settle()
+    await picked
+    expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "user" })
+  })
+
+  test("#given a held set-model --set-by lead #when only an extension reload re-runs the session start and the hold then lands #then the landed switch is still the lead's", async () => {
+    const e = engineFixture()
+    await e.record({ ...CLAUDE, thinking_level: "high", provenance: "set", set_by: "config", reason: null })
+    e.admission.hold = true
+    expect(await e.sharedSdk().sdk.setModel({ thread: "lane", model: "gpt-y", set_by: "lead" })).toMatchObject({ kind: "ok", pending: GPT_Y })
+    await e.settle()
+    await e.start("reload")
+    e.admission.hold = false
+    const landed = e.observed()
+    await e.engine._switchActiveModel(GPT_Y_MODEL, { persistDefault: false, appendSessionEntry: true, emitModelSelect: true, modelSelectSource: "set", invalidateCompaction: true, allowDeferral: false })
+    await e.settle()
+    await landed
     expect(await e.recorded()).toMatchObject({ ...GPT_Y, provenance: "set", set_by: "lead" })
   })
 

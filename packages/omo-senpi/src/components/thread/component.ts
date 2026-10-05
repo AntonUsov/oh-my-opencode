@@ -165,6 +165,28 @@ function switchLanded(pending: PendingSwitch): boolean {
   return false
 }
 
+/** How far back a scan for refused holds walks when the session has not been scanned yet. */
+const REFUSED_HOLD_WALK_LIMIT = 512
+
+/**
+ * senpi's `model_change_rejected` entries (`{ provider, modelId, timestamp }`) above `since`, newest first: a
+ * held switch the engine refused when it applied it. `since` undefined walks back at most the limit.
+ */
+function refusedHoldsSince(entries: SessionEntryReader, since: string | null | undefined): readonly { readonly at: number; readonly model: ModelRef }[] {
+  const found: { at: number; model: ModelRef }[] = []
+  let id = entries.getLeafId()
+  for (let step = 0; id !== null && id !== since && step < REFUSED_HOLD_WALK_LIMIT; step++) {
+    const entry = entries.getEntry(id) as { readonly type?: unknown; readonly parentId?: unknown; readonly provider?: unknown; readonly modelId?: unknown; readonly timestamp?: unknown } | undefined
+    if (entry === undefined) break
+    const at = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : Number.NaN
+    if (entry.type === "model_change_rejected" && typeof entry.provider === "string" && typeof entry.modelId === "string" && Number.isFinite(at)) {
+      found.push({ at: at + 1, model: { provider: entry.provider, id: entry.modelId } })
+    }
+    id = typeof entry.parentId === "string" ? entry.parentId : null
+  }
+  return found
+}
+
 /** senpi `ask-user/notify.js` ASK_USER_CLOSED_EVENT: every terminal outcome of an ask_user question, `{ requestId, status, resolvedBy? }`. */
 const ASK_USER_CLOSED_EVENT = "ask-user:closed"
 /** senpi `ask-user/notify.js` ASK_USER_ASKED_EVENT: a question opened, `{ ctx, request: { requestId, ... }, variant }`. */
@@ -355,10 +377,16 @@ export function createThreadComponent(options: ThreadComponentOptions = {}): Omo
           ctx.logger.warn(`thread gateway: the legacy thread mailbox was not imported: ${error instanceof Error ? error.message : String(error)}`)
         }
       }
-      pi.on("session_start", (_event, eventCtx) => {
+      pi.on("session_start", (event, eventCtx) => {
         void importLegacyMailbox()
         const durableId = durableIdOf(eventCtx)
         if (durableId !== undefined) void pickUpArms(durableId)
+        // The engine keeps a held switch in memory only: a session that starts (not an extension reload
+        // inside a live session) carries no hold, so a set-model choice noted before it is stale.
+        const reason = (event as { readonly reason?: unknown } | undefined)?.reason
+        if (durableId !== undefined && reason !== "reload" && existsSync(gatewayDatabasePath(agentDir()))) {
+          void store.dropHeldChoice({ durable_id: durableId, before: store.now() }).catch(warnUnrecorded("the end of a held model switch at session start"))
+        }
       })
       pi.on("agent_start", async (_event, eventCtx) => {
         run.turn++
@@ -392,6 +420,17 @@ export function createThreadComponent(options: ThreadComponentOptions = {}): Omo
         return typeof level === "string" ? level : null
       }
       const warnUnrecorded = (what: string) => (error: unknown) => ctx.logger.warn(`thread gateway: ${what} was not recorded: ${error instanceof Error ? error.message : String(error)}`)
+      // A held switch the engine refuses when it applies it leaves a `model_change_rejected` entry and no
+      // model_select, so nothing else would clear the choice a set-model noted for it.
+      const scannedTo = new Map<string, string | null>()
+      const dropRefusedHolds = (durableId: string, eventCtx: unknown): Promise<void> | undefined => {
+        const entries = entryReaderOf(eventCtx)
+        if (entries === undefined) return undefined
+        const refused = refusedHoldsSince(entries, scannedTo.get(durableId))
+        scannedTo.set(durableId, entries.getLeafId())
+        if (refused.length === 0) return undefined
+        return Promise.all(refused.map((entry) => store.dropHeldChoice({ durable_id: durableId, before: entry.at, model: entry.model }))).then(() => undefined, warnUnrecorded("the end of a refused held model switch"))
+      }
       /**
        * `probe`: just after the switch, which may still be under admission - a landed switch is written, an
        * undecided one waits. `superseded`: the next switch began, so this one is decided; the engine's level
@@ -418,7 +457,10 @@ export function createThreadComponent(options: ThreadComponentOptions = {}): Omo
       }
       const settleQuiescent = async (eventCtx: unknown): Promise<void> => {
         const durableId = durableIdOf(eventCtx)
-        if (durableId !== undefined && (pendingSwitches.has(durableId) || thinkingChanged.has(durableId))) await settleSwitch(durableId, "quiescent")
+        if (durableId === undefined || !existsSync(gatewayDatabasePath(agentDir()))) return
+        const dropping = dropRefusedHolds(durableId, eventCtx)
+        if (pendingSwitches.has(durableId) || thinkingChanged.has(durableId)) await settleSwitch(durableId, "quiescent")
+        if (dropping !== undefined) await waitAtMost(dropping, COMPLETION_SETTLE_WAIT_MS)
       }
       pi.on("model_select", async (event, eventCtx) => {
         const durableId = durableIdOf(eventCtx)

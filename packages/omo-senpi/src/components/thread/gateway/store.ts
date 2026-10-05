@@ -20,7 +20,7 @@ import type {
   ReportOpResult,
   ToolReceiptBegin,
 } from "./store-relay-ops"
-import type { ObserveModelRequest, ObserveModelResult, PendingChoice, SessionModelRecord, ThreadModel } from "./session-models"
+import type { ModelRef, ObserveModelRequest, ObserveModelResult, PendingChoice, SessionModelRecord, ThreadModel } from "./session-models"
 import type { DeliveryReceipt } from "./store-ops"
 import type { ClearEndpointRequest, RegisterIncarnationRequest, SessionOwner } from "./store-ownership"
 import type {
@@ -143,6 +143,8 @@ export type GatewayStore = StoreExtensionApi & {
   readonly recordPendingSessionModel: (request: PendingChoice & { readonly now: number; readonly durable_id: string }) => Promise<{ readonly recorded: boolean; readonly previous: PendingChoice | null }>
   /** Replaces that choice with `next` (null clears it) only while the record still holds `expect`. */
   readonly replacePendingSessionModel: (request: { readonly durable_id: string; readonly expect: PendingChoice; readonly next: PendingChoice | null }) => Promise<boolean>
+  /** The engine ended a hold with no switch landing (refused at apply time, or the session started again): drops a choice noted before `before`. */
+  readonly dropHeldChoice: (request: { readonly durable_id: string; readonly before: number; readonly model?: ModelRef }) => Promise<boolean>
   /** The session's own `model_select`: keeps its record true and writes a fallback switch's milestone rows. */
   readonly observeModelSelect: (request: ObserveModelRequest) => Promise<ObserveModelResult>
   /** The model records of these sessions that exist, keyed by durable id; a plain read that takes no write lock. */
@@ -442,6 +444,7 @@ export function createGatewayStore(options: GatewayStoreOptions): GatewayStore {
     updateSessionThinking: (request) => call("update_session_thinking", request),
     recordPendingSessionModel: (request) => call("record_pending_session_model", request),
     replacePendingSessionModel: (request) => call("replace_pending_session_model", request),
+    dropHeldChoice: (request) => call("drop_held_choice", request),
     observeModelSelect: (request) => call("observe_model_select", request),
     sessionModels: (durableIds) => call("session_models", durableIds),
     sessionModelRecord: (durableId) => call("session_model_record", durableId),

@@ -63,7 +63,7 @@ describe("store extension migrations", () => {
     // Back to the v8 layout, holding the second row the case-sensitive v7 reservation added on upgrade.
     const db = new Database(gatewayDatabasePath(h.agentDir))
     try {
-      for (const column of ["pending_set_by", "pending_model_id", "pending_provider"]) db.exec(`ALTER TABLE session_models DROP COLUMN ${column}`)
+      for (const column of ["pending_noted_at", "pending_set_by", "pending_model_id", "pending_provider"]) db.exec(`ALTER TABLE session_models DROP COLUMN ${column}`)
       db.exec("INSERT INTO extension_objects (type, name, owner) VALUES ('table', 'Alpha_Items', NULL)")
       db.exec("PRAGMA user_version = 8")
     } finally {

@@ -5,14 +5,14 @@
  * its revert) and writes one `milestone` row per outbound binding for a fallback switch.
  */
 import type { SqlRow } from "./sql"
-import { fallbackMilestoneText, type ModelChange, type ModelProvenance, type ModelSetter, type ObserveModelRequest, type ObserveModelResult, type PendingChoice, type SessionModelRecord, type ThreadModel } from "./session-models"
+import { fallbackMilestoneText, type ModelChange, type ModelProvenance, type ModelRef, type ModelSetter, type ObserveModelRequest, type ObserveModelResult, type PendingChoice, type SessionModelRecord, type ThreadModel } from "./session-models"
 import { type StoreContext, transaction, write } from "./store-ops"
 import { expireDue, insertOutbox, selectBindings } from "./store-relay-ops"
 
 const COLUMNS = ["durable_id", "provider", "model_id", "thinking_level", "provenance", "set_by", "reason", "chosen_provider", "chosen_model_id", "chosen_provenance", "revision", "pending_provider", "pending_model_id", "pending_set_by"] as const
 
 /** A switch that lands clears a set-model's noted choice, as it ends the engine's hold. */
-const CLEAR_PENDING = "pending_provider = NULL, pending_model_id = NULL, pending_set_by = NULL"
+const CLEAR_PENDING = "pending_provider = NULL, pending_model_id = NULL, pending_set_by = NULL, pending_noted_at = NULL"
 
 function nullable(value: unknown): string | null {
   return value === null || value === undefined ? null : String(value)
@@ -105,7 +105,7 @@ export async function recordPendingSessionModel(ctx: StoreContext, request: Pend
   return await transaction(ctx, "record_pending_session_model", () => {
     const row = selectModel(ctx, request.durable_id)
     if (row === undefined) return { recorded: false, previous: null }
-    write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ? WHERE durable_id = ?", [request.provider, request.id, request.set_by, request.durable_id])
+    write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ?, pending_noted_at = ? WHERE durable_id = ?", [request.provider, request.id, request.set_by, request.now, request.durable_id])
     return { recorded: true, previous: pendingFrom(row) }
   })
 }
@@ -114,8 +114,21 @@ export async function recordPendingSessionModel(ctx: StoreContext, request: Pend
 export async function replacePendingSessionModel(ctx: StoreContext, request: { readonly durable_id: string; readonly expect: PendingChoice; readonly next: PendingChoice | null }): Promise<boolean> {
   const { expect, next } = request
   return await transaction(ctx, "replace_pending_session_model", () =>
-    write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ? WHERE durable_id = ? AND pending_provider = ? AND pending_model_id = ? AND pending_set_by = ?", [
-      next?.provider ?? null, next?.id ?? null, next?.set_by ?? null, request.durable_id, expect.provider, expect.id, expect.set_by,
+    write(ctx, "UPDATE session_models SET pending_provider = ?, pending_model_id = ?, pending_set_by = ?, pending_noted_at = CASE WHEN ? IS NULL THEN NULL ELSE pending_noted_at END WHERE durable_id = ? AND pending_provider = ? AND pending_model_id = ? AND pending_set_by = ?", [
+      next?.provider ?? null, next?.id ?? null, next?.set_by ?? null, next?.provider ?? null, request.durable_id, expect.provider, expect.id, expect.set_by,
+    ]) > 0)
+}
+
+/**
+ * The engine ended a hold without a switch landing: it refused the held switch at apply time (`model`
+ * names it), or the session started again and the in-memory hold is gone (no `model`). Drops the noted
+ * choice only when it was noted before `before` (and names `model` when given), so a set-model that
+ * noted the same choice again afterwards keeps it. True when a choice was dropped.
+ */
+export async function dropHeldChoice(ctx: StoreContext, request: { readonly durable_id: string; readonly before: number; readonly model?: ModelRef }): Promise<boolean> {
+  return await transaction(ctx, "drop_held_choice", () =>
+    write(ctx, `UPDATE session_models SET ${CLEAR_PENDING} WHERE durable_id = ? AND pending_noted_at IS NOT NULL AND pending_noted_at < ?${request.model === undefined ? "" : " AND pending_provider = ? AND pending_model_id = ?"}`, [
+      request.durable_id, request.before, ...(request.model === undefined ? [] : [request.model.provider, request.model.id]),
     ]) > 0)
 }
 

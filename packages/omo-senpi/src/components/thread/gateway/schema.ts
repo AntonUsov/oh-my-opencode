@@ -223,12 +223,16 @@ export const GATEWAY_MIGRATIONS: readonly (readonly string[])[] = [
   // moved and came back to the same values (A->B->A).
   ["ALTER TABLE session_models ADD COLUMN revision INTEGER NOT NULL DEFAULT 0"],
   // v9 (#9429): the choice of a set-model the engine held (`pending_*`), so the switch keeps its
-  // setter when it lands; any switch that lands clears it, as it clears the engine's hold. Also drops
+  // setter when it lands; any switch that lands clears it, as it clears the engine's hold. The engine can
+  // also end a hold with no switch (it refuses it at apply time, or the session restarts and the in-memory
+  // hold is gone): `pending_noted_at` lets the session drop a choice noted before such an end, and only
+  // that one, never a choice a set-model noted again after it. Also drops
   // the second, core-owned row a case-sensitive v7 reservation added for a mixed-case extension object.
   [
     "ALTER TABLE session_models ADD COLUMN pending_provider TEXT",
     "ALTER TABLE session_models ADD COLUMN pending_model_id TEXT",
     "ALTER TABLE session_models ADD COLUMN pending_set_by TEXT CHECK (pending_set_by IS NULL OR pending_set_by IN ('config', 'user', 'lead'))",
+    "ALTER TABLE session_models ADD COLUMN pending_noted_at INTEGER",
     `DELETE FROM extension_objects WHERE owner IS NULL AND EXISTS (
        SELECT 1 FROM extension_objects e WHERE e.owner IS NOT NULL AND e.type = extension_objects.type AND e.name = extension_objects.name COLLATE NOCASE)`,
   ],
