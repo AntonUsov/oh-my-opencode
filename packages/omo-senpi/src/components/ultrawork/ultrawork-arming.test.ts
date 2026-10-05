@@ -41,6 +41,41 @@ describe("omo-senpi ultrawork once-per-session arming", () => {
     }
   })
 
+  it("#given a relayed report or a quoted mention #when it reaches a root session #then it does not arm, while typed asks still do", async () => {
+    for (const text of [
+      "[REPORT] lane | milestone | the executor armed ulw from its brief; mass ulw research is the common phrasing",
+      "[gh-feed -> lane] the ulw-execute PR landed",
+      "Lead (main), lane: your report quoted ulw and armed my session",
+      "the bug: a message that says \"please ulw this\" arms the directive",
+      "> ulw research the market\nwhat do you think of this request?",
+    ]) {
+      const pi = new FakeExtensionAPI()
+      const arming = createSessionArming()
+      await createUltraworkComponent(arming).register(pi, createTestContext(pi))
+      const eventCtx = sessionEventCtx("session-relay")
+
+      await dispatchInput(pi, text, "interactive", undefined, eventCtx)
+      expect(pi.messages).toHaveLength(0)
+      expect(arming.isArmed("session-relay")).toBe(false)
+    }
+
+    for (const text of [
+      "\uC774 \uBC84\uADF8 \uACE0\uCCD0\uC918 ulw",
+      "mass ulw research the housing market",
+      "fix the login redirect, ulw, and open a PR",
+      "ulw add a dark mode toggle",
+    ]) {
+      const pi = new FakeExtensionAPI()
+      const arming = createSessionArming()
+      await createUltraworkComponent(arming).register(pi, createTestContext(pi))
+      const eventCtx = sessionEventCtx("session-typed")
+
+      const result = await dispatchInput(pi, text, "interactive", undefined, eventCtx)
+      expectHiddenInjection(pi, result)
+      expect(arming.isArmed("session-typed")).toBe(true)
+    }
+  })
+
   it("#given an armed session #when a second trigger dispatches #then injects a short reminder instead of the full directive", async () => {
     // given: the first trigger of a session arms the full directive once
     const pi = new FakeExtensionAPI()

@@ -50,6 +50,21 @@ describe("omo-senpi skill-pointers suppression", () => {
       }
     })
 
+    it("#when the message is a relayed report or the mention is quoted #then no pointer is injected", async () => {
+      const pi = new FakeExtensionAPI()
+      await registerSkillPointers(pi)
+
+      for (const text of [
+        "[REPORT] lane | filed | an executor quoted mass ulw research and ulw-loop",
+        "Lead (main), lane: your report mentioned ulw-research and mass-ulw",
+        "they typed \u201Cmass ulw research the market\u201D and it armed",
+        "> ulw-loop the migration\nshould this have armed?",
+      ]) {
+        expect(matchedSkillPointerNames(text)).toEqual([])
+        expectNoInjection(pi, await dispatchInput(pi, text))
+      }
+    })
+
     it("#when code separates skill-name fragments #then removing it does not fabricate a match", async () => {
       const pi = new FakeExtensionAPI()
       await registerSkillPointers(pi)

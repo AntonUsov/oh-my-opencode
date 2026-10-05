@@ -1,3 +1,14 @@
+## 2026-10-05 - A relayed report or a quoted mention no longer arms ultrawork or skill pointers (#9600)
+
+`skill-pointers/strip-quoted-regions.ts`, the masking that both `ultrawork` and `skill-pointers` run before they look for a keyword, now also hides text that is someone else's:
+- **A relayed message:** one that opens with a sender header is masked whole. The header is a bracketed tag such as `[REPORT]` or `[a -> b]`, or `Name (id), recipient:`. A report pasted into a root session that describes a bug and so mentions `ulw`, `mass ulw` or a skill name used to arm the directive and inject pointers there.
+- **A Markdown block-quote line** (`> ...`).
+- **A span inside straight or curly double quotes** on one line.
+
+Typed asks keep arming: the keyword at the end of a Korean sentence, `mass ulw research ...`, a short mid-message `..., ulw, and ...`, and a leading `ulw <task>`. Measured over two weeks of local sessions, a third of all arms were relayed reports. A first-or-last-word rule or a slash-only rule would instead have dropped most typed arms, because mid-message is the most common typed form.
+
+Tests: `ultrawork-arming.test.ts` (relayed and quoted inputs do not arm; four typed forms still arm) and `skill-pointers-suppression.test.ts` (relayed and quoted mentions inject no pointer). Both fail on `dev`, and removing any one of the three masks fails them again.
+
 ## 2026-10-05 - An idle gateway store no longer keeps its worker thread alive
 
 Every session that touches the gateway store (each terminal with a control endpoint, and every sender) started one store worker thread and kept it until the session ended. A measured idle worker retains 2.94 MB: an empty Bun worker plus the bundled store code and SQLite. That put the terminal control endpoint's idle cost at about 4.1 MB against the 3 MB budget.
