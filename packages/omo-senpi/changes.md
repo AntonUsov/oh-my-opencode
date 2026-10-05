@@ -1,3 +1,22 @@
+## 2026-10-05 - A thread can be created with skills it follows from its first turn
+
+`thread_create` and `omo thread create` take `skills`: names of installed skills the new session follows from its first turn, as if each were loaded with `/skill`. No slash command is sent, and no turn is started.
+
+How the names are handled:
+- **Checked before the session exists:** a path, raw text, or a name no skill directory the session would load from holds refuses the create with `invalid_arguments` naming it, and nothing is opened.
+- **Looked up in the session's own registry,** so scope and trust follow the usual `/skill` rules. A skill disabled since then is skipped and logged.
+- **Kept in the session's file,** so a restart applies the list again.
+
+The result echoes the attached names as `thread.skills`; an older omo that ignores the field returns none, which is how a caller detects it.
+
+Tests (`initial-skills.test.ts`):
+- a known skill opens the session with the list, sends no prompt and is echoed;
+- an unknown name, a path or raw text is refused, and no session is opened;
+- the body is in the instructions on the first turn, on later turns and in the preview;
+- a restart with no launch context re-applies the list from the session file;
+- a skill the registry no longer holds is not injected;
+- a session created without skills is unchanged.
+
 ## 2026-10-05 - A bound session's ask_user question reaches its chat thread on its own, with its options
 
 A question reached a session's chat thread only when the model relayed it with `thread_report`, and the row carried text alone, so a connector could not offer numbered options or buttons, nor tell whether the session was waiting.
