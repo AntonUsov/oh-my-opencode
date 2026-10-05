@@ -1,3 +1,7 @@
+## 2026-10-05 - Detect stale stylesheet references across web deployments (#9617)
+
+The web deployment-coherence probe retains the stylesheet references from build A's HTML, checks both unchanged-build controls, and requests the retained paths against build B. It covers English and Korean with synthetic mobile Safari and WKWebView user agents and rejects missing CSS, HTML masquerading as CSS, or a broken control. Same-origin absolute references are rebased to B so the check cannot silently fetch the old stylesheet from A and report success. Five HTTP/CLI behavior tests cover these paths. This increment detects the failure; asset retention and bounded HTML expiry are still being implemented.
+
 ## 2026-10-05 - Adopt senpi 2026.10.10
 
 Every `@code-yeongyu/senpi` pin moves from 2026.10.9 to 2026.10.10: the root devDependency, `omo-native` and its provider map, the `omo-senpi` and `senpi-task` peer and dev pins (with their `senpi-tui` and `senpi-ai` aliases), the pin tests and the engine named in `senpi-task`'s coverage test. The engine adds code mode's `%bun add` / `%npm add` and opt-in isolated cells and the fixes listed in its release; omo's codemode prompt surface is unchanged (the default eval description renders from the same senpi source in both versions, and omo sets neither `prompt.advertiseHelpers` nor `sandbox.enabled`). The generated plugin bundles are regenerated for it on Linux.
