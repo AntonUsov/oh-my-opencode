@@ -1,3 +1,29 @@
+## 2026-10-05 - A bound session's ask_user question reaches its chat thread on its own, with its options
+
+A question reached a session's chat thread only when the model relayed it with `thread_report`, and the row carried text alone, so a connector could not offer numbered options or buttons, nor tell whether the session was waiting.
+
+The thread component now relays every ask_user question of a bound session itself, when senpi announces it (`ask-user:asked`). The row goes where a report would go, and only to a binding that carries questions out. An unbound session, or one whose run answers more than one thread, writes nothing. A request gets one row: when the model also relays it, whichever came first owns the row, and `thread_report` returns that row with `deduplicated: true`.
+
+Question rows now carry what a connector renders from (schema v11):
+- `options`: the labels of a one-question ask;
+- `questions`: every question of the request, with ask_user's own ids;
+- `blocking`: whether the session waits for the answer;
+- `ask_hint`: the gateway user the session suggests asking.
+
+`thread_report` accepts `options`, `blocking` and `ask_hint` for questions and refuses them on every other kind. Rows written before v11 read these as null.
+
+Dialogs that other extensions open directly (`select`, `confirm`, `input`, `editor`) emit no senpi event yet (senpi#2767), so the model still relays those with `thread_report`.
+
+Tests (`question-mirror.test.ts`):
+- a bound session's question is written once with its fields, and a chat answer claims it;
+- a multi-part, non-waiting question carries every part and `blocking: false`;
+- an unbound session, or a binding not subscribed to questions, writes nothing;
+- mirror-then-report and report-then-mirror each leave one row;
+- two stores racing a mirror and a report leave one row;
+- a local answer closes the mirrored row;
+- a non-question report with the fields is refused;
+- a pre-v11 question reads as unknown after the upgrade.
+
 ## 2026-10-05 - A store extension can declare a session op its component calls but the model never sees
 
 A session-callable op gave the model a tool (`ext_<extension>_<toolName>`). Some ops take a session id the session's own component already knows, while it assembles its prompt: a digest cursor write, a membership read. Declaring them session-callable would have handed the model tools it must not have. Leaving them public would have let any caller forge the session id.
