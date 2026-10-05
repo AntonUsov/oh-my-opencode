@@ -7,6 +7,8 @@
 
 Typed asks keep arming: the keyword at the end of a Korean sentence, `mass ulw research ...`, a short mid-message `..., ulw, and ...`, and a leading `ulw <task>`. Measured over two weeks of local sessions, a third of all arms were relayed reports. A first-or-last-word rule or a slash-only rule would instead have dropped most typed arms, because mid-message is the most common typed form.
 
+Live: `scripts/qa/skill-pointers-e2e.mjs` gains a relayed-report, a quoted-mention and a Korean sentence-ending scenario. It now judges only the session transcript, because the engine's runtime snapshot under the agent dir ships docs containing `<ultrawork-mode>`, which made every whole-dir check pass or fail regardless of the session.
+
 Tests: `ultrawork-arming.test.ts` (relayed and quoted inputs do not arm; four typed forms still arm) and `skill-pointers-suppression.test.ts` (relayed and quoted mentions inject no pointer). Both fail on `dev`, and removing any one of the three masks fails them again.
 
 ## 2026-10-05 - An idle gateway store no longer keeps its worker thread alive
