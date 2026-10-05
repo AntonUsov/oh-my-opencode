@@ -27,6 +27,9 @@ export type ThreadModel = ModelRef & {
  */
 export type SessionModelRecord = { readonly model: ThreadModel; readonly revision: number }
 
+/** A set-model's choice waiting on the record (`pending_*`, v9): the switch it asked for and who asked (#9429). */
+export type PendingChoice = { readonly provider: string; readonly id: string; readonly set_by: ModelSetter }
+
 /** The `model_change` field of the milestone row a fallback switch writes. */
 export type ModelChange = { readonly from: ModelRef; readonly to: ModelRef; readonly reason: string | null }
 
