@@ -33,6 +33,15 @@ describe("store extension migrations", () => {
       db.exec("DROP TABLE extension_registrations")
       db.exec("DELETE FROM extension_objects WHERE owner IS NULL AND name NOT IN (SELECT name FROM sqlite_schema)")
       db.exec("PRAGMA user_version = 6")
+      // Each core step after v6 on its own adds no core row beside an object the extension owns: v9's
+      // cleanup must not be what hides a step that shadows (the reservation is every later step's template).
+      db.exec("BEGIN")
+      for (const [index, step] of GATEWAY_MIGRATIONS.slice(6).entries()) {
+        for (const statement of step) db.exec(statement)
+        const shadows = db.query("SELECT core.type, core.name FROM extension_objects core JOIN extension_objects owned ON owned.owner IS NOT NULL AND owned.type = core.type AND owned.name = core.name COLLATE NOCASE WHERE core.owner IS NULL").all()
+        expect({ version: 7 + index, shadows }).toEqual({ version: 7 + index, shadows: [] })
+      }
+      db.exec("ROLLBACK")
     } finally {
       db.close()
     }
@@ -41,6 +50,34 @@ describe("store extension migrations", () => {
     const check = new Database(gatewayDatabasePath(h.agentDir), { readonly: true })
     try {
       expect(check.query("PRAGMA user_version").get()).toEqual({ user_version: GATEWAY_MIGRATIONS.length })
+      expect(check.query("SELECT name, owner FROM extension_objects WHERE type = 'table' AND lower(name) = 'alpha_items'").all()).toEqual([{ name: "alpha_items", owner: "alpha" }])
+    } finally {
+      check.close()
+    }
+  })
+
+  test("#given a v8 store where the case-sensitive v7 reserved a mixed-case extension table as core #when the store upgrades #then v9 drops that core row and the extension registers again", async () => {
+    const h = (harness = createGatewayHarness())
+    const mixed: StoreExtensionRegistration = { name: "alpha", moduleUrl, migrations: [["CREATE TABLE Alpha_Items (id INTEGER PRIMARY KEY, value TEXT)"]] }
+    const first = h.store()
+    expect(await first.registerStoreExtension(mixed)).toMatchObject({ kind: "ok" })
+    await first.dispose()
+    // Back to the v8 layout, holding the second row the case-sensitive v7 reservation added on upgrade.
+    const db = new Database(gatewayDatabasePath(h.agentDir))
+    try {
+      // v10's tables and the core rows reserving them (their autoindexes included) go first.
+      for (const table of ["thread_creations", "extension_registrations"]) db.exec(`DROP TABLE ${table}`)
+      db.exec("DELETE FROM extension_objects WHERE owner IS NULL AND NOT EXISTS (SELECT 1 FROM sqlite_schema s WHERE s.type = extension_objects.type AND s.name = extension_objects.name)")
+      for (const column of ["pending_set_by", "pending_model_id", "pending_provider"]) db.exec(`ALTER TABLE session_models DROP COLUMN ${column}`)
+      db.exec("INSERT INTO extension_objects (type, name, owner) VALUES ('table', 'Alpha_Items', NULL)")
+      db.exec("PRAGMA user_version = 8")
+    } finally {
+      db.close()
+    }
+    const upgraded = h.store()
+    expect(await upgraded.registerStoreExtension(mixed)).toMatchObject({ kind: "ok" })
+    const check = new Database(gatewayDatabasePath(h.agentDir), { readonly: true })
+    try {
       expect(check.query("SELECT name, owner FROM extension_objects WHERE type = 'table' AND lower(name) = 'alpha_items'").all()).toEqual([{ name: "alpha_items", owner: "alpha" }])
     } finally {
       check.close()
