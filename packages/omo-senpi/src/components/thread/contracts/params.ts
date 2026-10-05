@@ -266,6 +266,13 @@ export const ThreadReportParams = Type.Object({
       description: "For kind question: which extension UI request request_id is. It decides the answer forms thread_answer accepts: confirm takes yes/no (any case, surrounding spaces ignored), input and editor take any text including empty, question and select take non-blank text. Without it the answer goes out in every text form at once, so a question, select, input or editor each reads its own and the text must be non-blank; a yes/no word also goes out as the confirm field, so an undeclared confirm reads yes/no too (any other text reads as no).",
     }),
   ),
+  options: Type.Optional(
+    Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { minItems: 1, maxItems: 20, description: "For kind question: the choices, in order, so the thread can offer them as numbered options or buttons. An ask_user question is relayed with its options on its own." }),
+  ),
+  blocking: Type.Optional(Type.Boolean({ description: "For kind question: true when this session waits for the answer, false when it keeps working." })),
+  ask_hint: Type.Optional(
+    Type.String({ minLength: 1, maxLength: 128, description: "For kind question: the gateway user this session suggests asking. The gateway still decides who is asked." }),
+  ),
   idempotency_key: IdempotencyKey,
 })
 
