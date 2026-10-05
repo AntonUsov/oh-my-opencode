@@ -134,9 +134,7 @@ export class RpcProcessRunner {
       this.noticeFallbackChainUnsupported()
       return
     }
-    // `set_retry_fallback` is newer than the senpi this package pins its RpcCommand type from.
-    const command = { type: "set_retry_fallback", retryFallback } as unknown as Parameters<RpcProtocolClient["send"]>[0]
-    const response = await client.send(command)
+    const response = await client.send({ type: "set_retry_fallback", retryFallback })
     if (!response.success) throw new Error(`set_retry_fallback refused: ${response.error}`)
   }
 
