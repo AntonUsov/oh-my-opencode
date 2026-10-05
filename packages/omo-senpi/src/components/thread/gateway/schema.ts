@@ -258,6 +258,11 @@ export const GATEWAY_MIGRATIONS: readonly (readonly string[])[] = [
     "ALTER TABLE outbox ADD COLUMN questions_json TEXT",
     "ALTER TABLE outbox ADD COLUMN blocking INTEGER CHECK (blocking IS NULL OR blocking IN (0, 1))",
     "ALTER TABLE outbox ADD COLUMN ask_hint TEXT",
+    // One question row per request is looked up inside every question write's transaction.
+    "CREATE INDEX outbox_question_request ON outbox (session_durable_id, ui_request_id) WHERE event_kind = 'question'",
+    `INSERT OR IGNORE INTO extension_objects (type, name, owner)
+     SELECT s.type, s.name, NULL FROM sqlite_schema s
+     WHERE NOT EXISTS (SELECT 1 FROM extension_objects e WHERE e.type = s.type AND e.name = s.name COLLATE NOCASE)`,
   ],
 ]
 

@@ -189,11 +189,11 @@ type AskedQuestion = { readonly requestId: string; readonly text: string; readon
 function askedQuestionOf(payload: unknown): AskedQuestion | undefined {
   const request = (payload as { readonly request?: unknown } | undefined)?.request as { readonly requestId?: unknown; readonly questions?: unknown; readonly waitForAnswer?: unknown } | undefined
   if (typeof request?.requestId !== "string" || request.requestId.length === 0 || !Array.isArray(request.questions)) return undefined
-  const questions: QuestionItem[] = request.questions.flatMap((item: unknown) => {
+  const questions: QuestionItem[] = request.questions.flatMap((item: unknown, position: number) => {
     const { id, header, question, options, multiSelect } = (item ?? {}) as { readonly id?: unknown; readonly header?: unknown; readonly question?: unknown; readonly options?: unknown; readonly multiSelect?: unknown }
     if (typeof question !== "string") return []
     const labels = Array.isArray(options) ? options.flatMap((option: unknown) => { const label = (option as { readonly label?: unknown } | null)?.label; return typeof label === "string" ? [label] : [] }) : []
-    return [{ id: typeof id === "string" ? id : "", header: typeof header === "string" ? header : "", question, options: labels, multi_select: multiSelect === true }]
+    return [{ id: typeof id === "string" && id.length > 0 ? id : `q${position + 1}`, header: typeof header === "string" ? header : "", question, options: labels, multi_select: multiSelect === true }]
   })
   if (questions.length === 0) return undefined
   const only = questions.length === 1 ? questions[0] : undefined

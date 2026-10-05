@@ -240,6 +240,7 @@ test("#given a store from before v10 with data #when it opens #then it migrates 
   try {
     db.exec("DROP TABLE IF EXISTS thread_creations; DROP TABLE IF EXISTS extension_registrations;")
     db.exec("DELETE FROM extension_objects WHERE name IN ('thread_creations', 'extension_registrations')")
+    db.exec("DROP INDEX IF EXISTS outbox_question_request")
     for (const column of ["ask_hint", "blocking", "questions_json", "options_json"]) db.exec(`ALTER TABLE outbox DROP COLUMN ${column}`)
     db.exec(`PRAGMA user_version = ${previous}`)
     db.query("INSERT INTO gateway_meta (key, value) VALUES ('fixture-keep', 'kept')").run()

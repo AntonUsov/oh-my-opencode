@@ -232,6 +232,39 @@ test("#given the model relayed the question first #when senpi's ask announcement
   expect(rows[0]).toMatchObject({ cursor: reported.cursor, text: "relayed ask-1", options: ["Ship it", "Wait for review"], blocking: true, ask_hint: "U123" })
 }, 30_000)
 
+test("#given a session bound to two threads #when it asks #then the mirror picks neither, and a report naming one thread owns the request even when a later report names the other", async () => {
+  const s = await setup()
+  const second = await s.sdk.bind({ session: "dur-1", binding: { platform: "custom", account_id: "bot", chat_id: "chat", thread_id: "t2" } })
+  if (second.kind !== "ok") throw new Error(JSON.stringify(second))
+  await s.ask()
+  expect(await s.outbox()).toEqual([])
+  const first = await s.report("ask-1", { binding_id: s.bindingId })
+  expect(first).toMatchObject({ kind: "ok", binding_id: s.bindingId, deduplicated: false })
+  const other = await s.report("ask-1", { binding_id: second.binding.binding_id })
+  expect(other).toMatchObject({ kind: "ok", binding_id: s.bindingId, cursor: first.cursor, reply_token: first.reply_token, deduplicated: true })
+  const page = await s.connectorStore.readOutbox({ now: Date.now(), binding_id: second.binding.binding_id, after_cursor: 0, limit: 10 })
+  expect(page).toMatchObject({ kind: "ok", rows: [] })
+}, 30_000)
+
+test("#given an ask_user request whose questions carry no ids #when it is mirrored #then each question gets its position as a stable id", async () => {
+  const s = await setup()
+  await s.ask({ requestId: "ask-noid", waitForAnswer: true, timeoutMs: 600_000, questions: [{ header: "A", question: "First?", options: [], multiSelect: false }, { id: "", header: "B", question: "Second?", options: [], multiSelect: false }] })
+  const [row] = await s.outbox()
+  expect(row?.questions?.map((question) => question.id)).toEqual(["q1", "q2"])
+}, 30_000)
+
+test("#given a store with many outbox rows #when a question write looks for an earlier row of its request #then it uses the question index, not a scan", async () => {
+  const s = await setup()
+  await s.ask()
+  const db = new Database(gatewayDatabasePath(s.agentDir), { readonly: true })
+  try {
+    const plan = db.query("EXPLAIN QUERY PLAN SELECT binding_id, revision, cursor, reply_token FROM outbox WHERE session_durable_id = ? AND ui_request_id = ? AND event_kind = 'question' ORDER BY cursor LIMIT 1").all("dur-1", "ask-1") as { readonly detail: string }[]
+    expect(plan.map((step) => step.detail).join(" | ")).toContain("outbox_question_request")
+  } finally {
+    db.close()
+  }
+}, 30_000)
+
 test("#given two stores writing for the same request at once #when one mirrors and the other reports #then exactly one question row exists", async () => {
   const s = await setup()
   const [mirrored, reported] = await Promise.all([
@@ -277,6 +310,7 @@ test("#given a question relayed before v11 #when the upgraded store reads it #th
   await s.connectorStore.dispose()
   const db = new Database(gatewayDatabasePath(s.agentDir))
   try {
+    db.run("DROP INDEX IF EXISTS outbox_question_request")
     for (const column of ["ask_hint", "blocking", "questions_json", "options_json"]) db.run(`ALTER TABLE outbox DROP COLUMN ${column}`)
     db.run("PRAGMA user_version = 10")
   } finally {
