@@ -84,18 +84,55 @@ test("#given an enforced lead #when tool args forge a worker identity #then the 
   expect(await toolCall(f, "worker", "bash", { session_id: "lead" })).toBeUndefined()
 })
 
-test("#given an enforced lead #when a store membership lookup fails #then bash passes through with a warning", async () => {
-  const f = await leadFixture()
+/** The component over the real store, whose membership lookups start failing on `fail()`, as in a store outage. */
+async function outage(f: ScopeFixture) {
+  let failing = false
   const pi = new FakeExtensionAPI()
   const warnings: string[] = []
   const access = createGatewayScopeAccess(async () => ({
     extensionCall: f.store.extensionCall.bind(f.store),
-    extensionSessionAwait: async () => { throw new Error("lookup unavailable") },
+    extensionSessionAwait: (async (...args: Parameters<typeof f.store.extensionSessionAwait>) => {
+      if (failing) throw new Error("lookup unavailable")
+      return await f.store.extensionSessionAwait(...args)
+    }) as typeof f.store.extensionSessionAwait,
   }), f.env)
   createGatewayComponent({ scopeAccess: access }).register(pi, {
     logger: { ...logger, warn: (message) => { warnings.push(message) } }, config: { getFlag: () => undefined },
   })
-  const results = await pi.dispatch("tool_call", { type: "tool_call", toolName: "bash", input: {} }, f.context("lead"))
-  expect(results.every((result) => result === undefined)).toBe(true)
-  expect(warnings).toHaveLength(1)
+  const call = async (session: string, toolName: string) => {
+    const results = await pi.dispatch("tool_call", { type: "tool_call", toolCallId: "call", toolName, input: {} }, f.context(session))
+    return results.find((result) => result !== null && typeof result === "object" && Reflect.get(result, "block") === true)
+  }
+  return { call, warnings, fail: () => { failing = true } }
+}
+
+test("#given a session last seen as a scope lead #when its membership lookup fails #then bash stays refused as lead tools restricted, and an allowlisted tool still works", async () => {
+  const f = await leadFixture()
+  const h = await outage(f)
+  expect(await h.call("lead", "bash")).toMatchObject({ block: true })
+  h.fail()
+  const refused = await h.call("lead", "bash")
+  expect(refused).toMatchObject({ block: true, reason: expect.stringContaining("lead tools restricted: membership lookup failed") })
+  expect(await h.call("lead", "read")).toBeUndefined()
+  expect(h.warnings).toHaveLength(2)
+})
+
+test("#given a session never seen as a lead #when its membership lookup fails #then bash passes through with a warning", async () => {
+  const f = await leadFixture()
+  const h = await outage(f)
+  expect(await h.call("worker", "bash")).toBeUndefined()
+  h.fail()
+  expect(await h.call("worker", "bash")).toBeUndefined()
+  expect(await h.call("unbound", "bash")).toBeUndefined()
+  expect(h.warnings).toHaveLength(2)
+})
+
+test("#given a lead released by a membership push #when its next lookup fails #then bash passes through, since its last lookup said it no longer leads", async () => {
+  const f = await leadFixture()
+  const h = await outage(f)
+  expect(await h.call("lead", "bash")).toMatchObject({ block: true })
+  await f.members("A", null, [worker])
+  expect(await h.call("lead", "bash")).toBeUndefined()
+  h.fail()
+  expect(await h.call("lead", "bash")).toBeUndefined()
 })
