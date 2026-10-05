@@ -1,6 +1,8 @@
 ## 2026-10-05 - Detect stale stylesheet references across web deployments (#9617)
 
-The web deployment-coherence probe retains the stylesheet references from build A's HTML, checks both unchanged-build controls, and requests the retained paths against build B. It covers English and Korean with synthetic mobile Safari and WKWebView user agents and rejects missing CSS, HTML masquerading as CSS, or a broken control. Same-origin absolute references are rebased to B so the check cannot silently fetch the old stylesheet from A and report success. Five HTTP/CLI behavior tests cover these paths. This increment detects the failure; asset retention and bounded HTML expiry are still being implemented.
+The web deployment-coherence probe retains the stylesheet references from build A's HTML, checks both unchanged-build controls, and requests the retained paths against build B. It covers English and Korean with synthetic mobile Safari and WKWebView user agents and rejects missing CSS, HTML masquerading as CSS, or a broken control. Same-origin absolute references are rebased to B so the check cannot silently fetch the old stylesheet from A and report success. Five HTTP/CLI behavior tests cover these paths.
+
+The static-asset carry-forward engine preserves an explicitly bootstrapped legacy inventory or a prior published history, checks downloaded bytes and CSS MIME, and retires resources only after the advertised HTML lifetime plus deployment overlap. It preserves a longer inherited deadline when a newer build reuses an asset path. Ten HTTP/file behavior tests cover retention, expiry, overlap, reused deadlines, invalid paths and failed downloads. Applied to the actual build-B assets, it changes the same four retained-document cases from 404 to usable CSS. Production CLI/workflow wiring, migration inventory and bounded HTML expiry are still in progress.
 
 ## 2026-10-05 - Adopt senpi 2026.10.10
 
