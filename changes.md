@@ -1,3 +1,7 @@
+## 2026-10-05 - Install guide lists the community AUR package (#9584)
+
+`docs/guide/install.md` gains an "Arch Linux: community AUR package" section for `omo-bin`, a package maintained by @sTiKyt outside the OmO team. The section says what it installs (our official release binary for its version, checked against that release's `SHA256SUMS`, as `/usr/bin/omo`), and to update it with the AUR helper, because `omo update` and the install command don't recognize a pacman install yet (#9585). It also says the package can trail the `latest` channel.
+
 ## 2026-10-05 - The manifesto keeps the top three quarters of the screen fully lit (#9591)
 
 On omo.dev's manifesto the reveal fully lit text only down to about two thirds of the viewport (median ~0.66, as low as ~0.61, measured at word tops at 390 / 1440 / 1920 in en and ko), against the 75-80% the reading design asked for (#9537). A word is fully lit once its bottom, plus its in-line stagger, is above `--lit-line - --lit-band`. That line was 78vh - 8vh = 70vh, so the tops of the last fully lit words sat near 66%. `--lit-line` moves to 91vh (`packages/web/app/styles/design-system.css`), putting the full line at 83vh. Measured the same way after the change, the depth is 0.805-0.819 at the median and 0.760-0.772 at worst in every one of those configurations, identical on the scroll-timeline and the fallback path. The reveal order, the reduced-motion path and the lit-at-the-bottom guarantee are unchanged.
