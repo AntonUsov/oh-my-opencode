@@ -33,15 +33,24 @@ interface FakeEngine {
   commands(): Array<{ readonly type: string; readonly retryFallback?: unknown }>
 }
 
-function processRunner(capabilities: readonly string[]): FakeEngine {
+function processRunner(
+  capabilities: readonly string[],
+  options: { readonly retryFallback?: "refuse" | "hang"; readonly fallbackChainDeadlineMs?: number } = {},
+): FakeEngine {
   const warnings: string[] = []
   const log = join(tempDir(), "commands.jsonl")
   const runner = new RpcProcessRunner({
     // Model admission probes a real catalog (seconds on a cold Windows runner); it is not what these tests cover.
     modelAdmission: async () => {},
     onWarning: (message) => void warnings.push(message),
+    ...(options.fallbackChainDeadlineMs === undefined ? {} : { fallbackChainDeadlineMs: options.fallbackChainDeadlineMs }),
     spawnChild: (descriptor) => {
-      const child = spawnFakeChild({ ...descriptor.env, FAKE_CAPABILITIES: capabilities.join(","), FAKE_COMMAND_LOG: log })
+      const child = spawnFakeChild({
+        ...descriptor.env,
+        FAKE_CAPABILITIES: capabilities.join(","),
+        FAKE_COMMAND_LOG: log,
+        ...(options.retryFallback === undefined ? {} : { FAKE_RETRY_FALLBACK: options.retryFallback }),
+      })
       children.push(child)
       return child
     },
@@ -116,5 +125,37 @@ describe("a process-runner child's own fallback chain (#9582)", () => {
     expect(engine.commands().map((command) => command.type)).not.toContain("set_retry_fallback")
     expect(engine.warnings).toHaveLength(1)
     expect(engine.warnings[0]).toContain("retry_fallback_command")
+  })
+
+  test("#given an engine that refuses the chain #when a child with fallback models starts #then it still gets its first prompt and the user is told why the chain is missing", async () => {
+    // given
+    const engine = processRunner(["retry_fallback_command"], { retryFallback: "refuse" })
+
+    // when
+    const handle = await engine.runner.start(spec("st_p6", CHAINED))
+
+    // then
+    await handle.waitForIdle()
+    expect(handle.lastAssistantText()).toBe("hello")
+    expect(engine.commands().map((command) => command.type)).toEqual(["get_protocol_info", "set_retry_fallback", "prompt"])
+    expect(engine.warnings).toHaveLength(1)
+    expect(engine.warnings[0]).toContain("st_p6")
+    expect(engine.warnings[0]).toContain("refused")
+  })
+
+  test("#given an engine that never answers the chain #when a child with fallback models starts #then its first prompt goes out after the deadline instead of waiting forever", async () => {
+    // given
+    const engine = processRunner(["retry_fallback_command"], { retryFallback: "hang", fallbackChainDeadlineMs: 300 })
+
+    // when
+    const handle = await engine.runner.start(spec("st_p7", CHAINED))
+
+    // then
+    await handle.waitForIdle()
+    expect(handle.lastAssistantText()).toBe("hello")
+    expect(engine.commands().map((command) => command.type)).toEqual(["get_protocol_info", "set_retry_fallback", "prompt"])
+    expect(engine.warnings).toHaveLength(1)
+    expect(engine.warnings[0]).toContain("st_p7")
+    expect(engine.warnings[0]).toContain("no answer")
   })
 })

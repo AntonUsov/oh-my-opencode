@@ -6,6 +6,7 @@
 //   FAKE_EMIT_MALFORMED=1 emit one malformed line then a valid event at startup
 //   FAKE_CAPABILITIES=a,b get_protocol_info advertises these capabilities
 //   FAKE_COMMAND_LOG=path append every received command as one JSON line
+//   FAKE_RETRY_FALLBACK=refuse|hang answer set_retry_fallback with an error, or never answer it
 import { appendFileSync } from "node:fs"
 import { createInterface } from "node:readline"
 import { kill } from "node:process"
@@ -129,6 +130,10 @@ function handleCommand(cmd) {
           capabilities: (process.env.FAKE_CAPABILITIES ?? "").split(",").filter((entry) => entry.length > 0),
         },
       })
+    case "set_retry_fallback":
+      if (process.env.FAKE_RETRY_FALLBACK === "hang") return
+      if (process.env.FAKE_RETRY_FALLBACK === "refuse") return reject("set_retry_fallback", cmd.id, "set_retry_fallback is refused once a turn has started")
+      return respond("set_retry_fallback", cmd.id)
     case "get_state":
       return respond("get_state", cmd.id, {
         data: {
