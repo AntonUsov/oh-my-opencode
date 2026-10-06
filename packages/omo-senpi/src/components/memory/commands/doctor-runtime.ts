@@ -19,6 +19,7 @@ import {
   type CheckLevel,
   type DoctorCheck,
 } from "./doctor-checks"
+import { checkQuarantinedRuns, checkReceipts, type QuarantinedRun, type ReceiptSummaries } from "./doctor-receipts"
 import { checkGhostReservation } from "./doctor-reservation"
 import { factsRemediationHint, formatFactsAdvisory, readFactsOverview } from "./facts-status"
 import {
@@ -91,17 +92,25 @@ export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandConte
   const extra: string[] = []
   let audit: MemoryAuditReport | null = null
   let skills = { scanned: 0, repaired: 0 }
+  let receipts: ReceiptSummaries | null = null
+  let quarantinedRuns: readonly QuarantinedRun[] = []
 
   if (repository.level === "ok") {
     const warnTokens = deps.loadSettings().settings.compile_warn_tokens
     const systemTokens = await estimateSystemTokens(repoDir)
     audit = await auditMemoryRepo(repoDir, { systemTokens, budgetTokens: warnTokens })
+    const receiptCheck = await checkReceipts(identity.identityPaths.runtime, deps.now?.() ?? Date.now())
+    const quarantine = await checkQuarantinedRuns(identity.identityPaths.reflection)
+    receipts = receiptCheck.receipts
+    quarantinedRuns = quarantine.runs
     checks.push(
       ...(await checkFrontmatter(repoDir, audit)),
       await checkSoulSeed(repoDir),
       await checkLocks(deps, identity.identityPaths.locks),
       await checkWorktrees(deps, identity),
       await checkAbandonedRuns(identity.identityPaths.reflection),
+      quarantine.check,
+      receiptCheck.check,
       await checkGhostReservation(identity.identityPaths, deps),
       await checkReflectionHealth(identity.identityPaths.reflection, { now: deps.now?.() ?? Date.now() }),
       await checkTokens(repoDir, warnTokens, systemTokens),
@@ -135,7 +144,7 @@ export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandConte
   const level = worstLevel(checks)
   const notifyLevel = level === "fail" ? "error" : level === "warn" ? "warning" : "info"
   if (parsed.flags.has("json")) {
-    return respond(ctx, JSON.stringify(redactReportStrings({ identity: identity.identity, level, checks, audit, skills }), null, 2), notifyLevel)
+    return respond(ctx, JSON.stringify(redactReportStrings({ identity: identity.identity, level, checks, audit, skills, receipts, quarantinedRuns }), null, 2), notifyLevel)
   }
   const lines = [
     `# Memory doctor: ${identity.identity}`,

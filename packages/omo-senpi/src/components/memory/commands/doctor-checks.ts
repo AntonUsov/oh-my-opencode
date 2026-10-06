@@ -178,6 +178,15 @@ export async function checkWorktrees(
   }
 }
 
+/** Reconciliation already discarded an interrupted launch's worktree; nothing is left to dispose of. */
+async function isInterruptedLaunch(sentinel: string): Promise<boolean> {
+  try {
+    return (JSON.parse(await readFile(sentinel, "utf8")) as { reason?: unknown }).reason === "launch_interrupted"
+  } catch {
+    return false
+  }
+}
+
 export async function checkAbandonedRuns(reflectionDir: string): Promise<DoctorCheck> {
   const runsDir = join(reflectionDir, "runs")
   let entries
@@ -186,10 +195,12 @@ export async function checkAbandonedRuns(reflectionDir: string): Promise<DoctorC
   } catch {
     return { name: "abandoned-runs", level: "ok", detail: "no abandoned runs" }
   }
-  const abandoned = entries
-    .filter((entry) => entry.isDirectory() && existsSync(join(runsDir, entry.name, "abandoned.json")))
-    .map((entry) => join(runsDir, entry.name))
-    .sort()
+  const abandoned: string[] = []
+  for (const entry of entries) {
+    const sentinel = join(runsDir, entry.name, "abandoned.json")
+    if (entry.isDirectory() && existsSync(sentinel) && !(await isInterruptedLaunch(sentinel))) abandoned.push(join(runsDir, entry.name))
+  }
+  abandoned.sort()
   if (abandoned.length === 0) return { name: "abandoned-runs", level: "ok", detail: "no abandoned runs" }
   return {
     name: "abandoned-runs",
