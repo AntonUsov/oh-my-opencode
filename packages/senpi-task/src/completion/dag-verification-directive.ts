@@ -10,15 +10,12 @@ Before relying on this result you MUST, in order:
 If ANY deliverable is missing, partial, or unproven, or the node drifted out of scope: send precise corrective instructions to THIS node (dag action "send" with this run_id and node_id; "retry" when it cannot be continued) and demand the fix WITH evidence: complete what is missing, revert what fell outside the scope. Loop until your own verification passes.
 Work is done ONLY when you have verified it yourself.`
 
-export const ASTRA_DAG_VERIFICATION_DIRECTIVE = `DAG SUBAGENT COMPLETION - VERIFY THE EVIDENCE AGAINST THE NODE'S SCOPE.
-The child's prose summary is a CLAIM, not execution evidence. Reconstruct its deliverables, files, and required checks from its prompt, and inspect the actual artifacts for omissions and out-of-scope changes.
-Validate accessible execution records against the relevant code state, command, environment, and observed result. Reuse a passing check when that evidence covers the requirement and remains valid for the current state; do not repeat it merely because the child ran it.
-Rerun checks when execution evidence is missing, stale, contradictory, incomplete, or invalidated by changes or integration. Preserve repository-required checks, investigate real failures, and perform any integration verification the node's evidence does not cover.
-If a deliverable is missing, partial, unproven, or out of scope, send precise corrective instructions to THIS node with workflow action "send" and its run_id/node_id ("retry" when it cannot be continued). Require the fix with execution evidence, and revisit only the checks the correction invalidates.
-Accept completion only when every required deliverable and check is covered by valid evidence.`
+// The GPT-6 Astra parent gets a spot-check, not a replay: its prior is already to verify broadly,
+// and "run the commands it claims pass" made it rerun every green suite per node. The node's own
+// VERIFY output is the evidence it reads; a rerun needs a reason.
+export const ASTRA_DAG_VERIFICATION_DIRECTIVE = `DAG SUBAGENT COMPLETION - A CLAIM UNTIL ITS EVIDENCE CHECKS OUT.
+Read the node's VERIFY output against the scope its prompt set, in both directions: every owed deliverable present, nothing done beyond the scope. Rerun a check only when that output is missing, failing, or contradicts the scope.
+If a deliverable is missing, partial, unproven, or out of scope, send corrective instructions to THIS node (workflow action "send" with this run_id and node_id; "retry" when it cannot be continued) and require the fix with its VERIFY output.`
 
-export const ASTRA_DAG_RUN_VERIFICATION_DIRECTIVE = `DAG RUN COMPLETION - AUDIT THE COMBINED EVIDENCE.
-Reconcile the DAG's original requirements with its actual artifacts and accessible execution records. A child's prose claim or a terminal run status alone does not prove success.
-Check outstanding requirements, invalidated evidence, contradictory results, and integration coverage across nodes. Reuse passing evidence tied to the relevant code state, command, environment, and observed result; do not replay every already-verified child command at run completion.
-Run any repository-required checks that lack valid current evidence, rerun missing, stale, contradictory, or incomplete checks, and verify integration invalidated by combined changes. Investigate real failures and correct incomplete or out-of-scope work through the affected nodes.
-Accept the run only when its complete requirements, including necessary integration checks, have valid evidence; report unresolved failures or blockers.`
+export const ASTRA_DAG_RUN_VERIFICATION_DIRECTIVE = `DAG RUN COMPLETION.
+The run's verification node owns the combined checks; read its output against the run's requirements and the node summaries above. Rerun a check only when that output is missing, failing, or contradicts a requirement; correct incomplete or out-of-scope work through the affected node. Report unresolved failures or blockers.`

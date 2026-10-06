@@ -20,6 +20,19 @@ import {
 const generatedDirectivePath = resolve("packages/omo-senpi/src/components/ultrawork/generated-directive.ts")
 
 describe("omo-senpi ultrawork component", () => {
+  it("#given the generated directives #when read #then the baseline carries no variant marker and the Astra variant swaps only the marked blocks", () => {
+    // The markers are authoring scaffolding in SKILL.md; the shipped directives must not leak them,
+    // and the Astra variant must be a strict rewrite of the baseline (shorter, same sentinel).
+    expect(SENPI_ULTRAWORK_DIRECTIVE).not.toMatch(/omo-ultrawork-astra/)
+    expect(SENPI_ASTRA_ULTRAWORK_DIRECTIVE).not.toMatch(/omo-ultrawork-astra/)
+    expect(SENPI_ASTRA_ULTRAWORK_DIRECTIVE).not.toBe(SENPI_ULTRAWORK_DIRECTIVE)
+    expect(SENPI_ASTRA_ULTRAWORK_DIRECTIVE.length).toBeLessThan(SENPI_ULTRAWORK_DIRECTIVE.length)
+    expect(markerCount(SENPI_ASTRA_ULTRAWORK_DIRECTIVE)).toBe(1)
+    for (const shared of ["create_goal", "`todo`", "team_create", "tool.monitor(", "# Stop rules"]) {
+      expect(SENPI_ASTRA_ULTRAWORK_DIRECTIVE).toContain(shared)
+    }
+  })
+
   it("#given receiving model variants #when idle or queued input arms #then delivers only that model's generated directive", async () => {
     // Generated-to-delivered equality guards routing and the atomic queue contract,
     // not the wording of either prompt. Identifier details belong to model-core.
