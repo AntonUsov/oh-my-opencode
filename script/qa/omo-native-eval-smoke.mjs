@@ -68,10 +68,11 @@ function createSandbox(binary) {
     ] } },
   }))
   writeFileSync(join(sandbox.cwd, "fixture.txt"), `${sandbox.marker}\n`)
-  // Sandbox cells on; a short foreground window so the large sandbox cell detaches while it still runs.
+  // Sandbox cells on. Every cell gets 10 s before it detaches (room for a cold QuickJS boot on a slow runner); the
+  // large sandbox cell holds for 20 s, so it detaches while its item is already visible and settles well after.
   mkdirSync(join(sandbox.cwd, ".senpi"), { recursive: true })
   writeFileSync(join(sandbox.cwd, ".senpi", "codemode.json"), JSON.stringify({
-    sandbox: { enabled: true }, cellTimeoutSeconds: 3, foregroundWindowSeconds: 4,
+    sandbox: { enabled: true }, cellTimeoutSeconds: 10, foregroundWindowSeconds: 12,
   }))
   writeFileSync(sandbox.providerPath, evalSmokeProviderSource(sandbox.receiptPath))
   return sandbox
@@ -196,14 +197,22 @@ function readEvalResults(sessionDir) {
     .filter((message) => message.role === "toolResult" && message.toolName === "eval")
 }
 
-// The large cell's completion notification names the file holding its full output.
+// The large cell's completion notification names the file holding its full output. Records are decoded as JSON
+// first, so a Windows path keeps its backslashes, and the path runs to the end of its line (it may contain spaces).
 function largeCellSpill(sessionDir) {
-  const text = readdirSync(sessionDir).filter((name) => name.endsWith(".jsonl"))
-    .map((name) => readFileSync(join(sessionDir, name), "utf8")).join("\n")
-  const notice = text.split("\n").find((line) => line.includes("eval-smoke-5") && /[Ff]ull output: /u.test(line))
-  const path = notice?.match(/[Ff]ull output: ([^\s"\\\]]+)/u)?.[1]
+  const texts = readdirSync(sessionDir).filter((name) => name.endsWith(".jsonl"))
+    .flatMap((name) => readFileSync(join(sessionDir, name), "utf8").split("\n"))
+    .filter(Boolean).flatMap((line) => stringsOf(JSON.parse(line)))
+  const notice = texts.find((text) => text.includes("eval-smoke-5") && /[Ff]ull output: /u.test(text))
+  const path = notice?.match(/[Ff]ull output: (.+?)\]?[ \t]*$/mu)?.[1]
   if (path === undefined) throw new Error("no completion notification with a full-output path for the large sandbox cell")
   return readFileSync(path, "utf8")
+}
+
+function stringsOf(value) {
+  if (typeof value === "string") return [value]
+  if (value === null || typeof value !== "object") return []
+  return Object.values(value).flatMap(stringsOf)
 }
 
 function textOf(message) {
@@ -277,8 +286,7 @@ async function main() {
       throw new Error(`sandbox probe: expected no ambient process/fetch and the marker, got ${textOf(isolated)}`)
     }
     // An isolated cell's own error is a settled cell result (status "error"), not a failed tool call.
-    const storedFailed = stored.isError || stored.details?.cells?.[0]?.status === "error"
-    if (!storedFailed || !textOf(stored).includes("eval_isolate_no_state")) {
+    if (stored.details?.cells?.[0]?.status !== "error" || !textOf(stored).includes("eval_isolate_no_state")) {
       throw new Error(`sandbox store() was not refused with eval_isolate_no_state: ${textOf(stored)}`)
     }
     if (large.isError || peek.isError) throw new Error(`large sandbox cell: ${textOf(large)} / ${textOf(peek)}`)

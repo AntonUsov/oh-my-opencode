@@ -12,8 +12,8 @@ const cells = [
   { language: "py", code: "packaged_sentinel = 41\\nprint('PY_OK', packaged_sentinel + 1)\\nimport os\\nprint('PY_PID', os.getpid())", summary: "Run packaged Python" },
   { action: "list", summary: "List packaged cells" },
   { language: "js", isolate: true, code: "return [typeof process, typeof fetch, (await tool.read({ path: 'fixture.txt' })).text.trim()]", summary: "Probe the sandbox" },
-  { language: "js", isolate: true, code: "store('k', 1)", summary: "Try to keep state in the sandbox", expectError: "eval_isolate_no_state" },
-  { language: "js", isolate: true, code: "print('x'.repeat(4194304)); await tool.bash({ command: 'sleep 8' }); return 'BIG_DONE'", summary: "Stream one large item from the sandbox" },
+  { language: "js", isolate: true, code: "store('k', 1)", summary: "Try to keep state in the sandbox" },
+  { language: "js", isolate: true, code: "print('x'.repeat(4194304)); await tool.bash({ command: 'sleep 20' }); return 'BIG_DONE'", summary: "Stream one large item from the sandbox" },
   { action: "peek", cell_id: "eval-smoke-5", summary: "Peek at the large sandbox cell" },
 ]
 export default function register(pi) {
@@ -34,11 +34,8 @@ export default function register(pi) {
     api: "openai-completions", models: [model],
     streamSimple(_model, context, options) {
       const used = context.messages.filter((message) => message.role === "toolResult" && message.toolName === "eval")
-      // A cell may expect a named refusal; any other error ends the scripted run.
-      const unexpected = used.some((message, index) => message.isError && !cells[index]?.expectError)
-      const next = unexpected ? undefined : cells[used.length]
-      const { expectError: _expected, ...args } = next ?? {}
-      return stream(next === undefined ? undefined : args, used.length, options)
+      const args = used.some((message) => message.isError) ? undefined : cells[used.length]
+      return stream(args, used.length, options)
     },
   })
 }
