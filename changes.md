@@ -1,3 +1,7 @@
+## 2026-10-06 - The release binary ships the browser skill's omowright runtime (#9661)
+
+Since the browser guidance was routed through omowright (#8729, 5.1.11), the published release binary installed the browser skill without its bundled `runtime/omowright`, so `loadOmowright()` and `browser-doctor.mjs` always failed for binary installs while the npm `omo-ai` install worked. The native staging chain (`script/build-omo-native.ts`) runs `build:senpi-plugin:native` with `OMO_SKIP_MATERIALIZE=1`, which skips `stage-omowright-runtime.mjs`, and nothing else staged the gitignored runtime before the plugin payload was copied. The runtime is now a prebuilt native input staged via `build:materialize-frontend` when missing, and `skills/browser/runtime/omowright/index.js` is a required plugin artifact, so a payload without it fails the build instead of shipping. `script/build-omo-native.test.ts` covers both the staging trigger and the required-artifact gate.
+
 ## 2026-10-06 - Adopt senpi 2026.10.10-3
 
 Every `@code-yeongyu/senpi` pin moves from 2026.10.10-2 to 2026.10.10-3: the root devDependency, `omo-native` and its provider map comment, the `omo-senpi` and `senpi-task` peer and dev pins (with their `senpi-tui` and `senpi-ai` aliases), the pin tests and the engine named in `senpi-task`'s coverage test. The engine carries the retry-watchdog fix (senpi#2804) that the 5.1.21 hotfix ships, plus codemode's opt-in process-isolated JavaScript kernel. The generated plugin bundles are regenerated for it on Linux.
