@@ -17,6 +17,7 @@ interface ReceiptBase {
   readonly trigger: string
   readonly event: MemoryReceiptEvent
   readonly sha?: string
+  readonly reason?: string
   readonly detail?: string
 }
 
@@ -99,7 +100,12 @@ async function underReceiptsLock<T>(runtimeDir: string, operation: () => Promise
 
 function toReceipt(input: MemoryReceiptInput): MemoryReceipt {
   const detail = input.detail === undefined ? undefined : boundDetail(input.detail)
-  return { v: 1, at: new Date().toISOString(), ...input, ...(detail === undefined ? {} : { detail }), host: hostname(), pid: process.pid }
+  const reason = input.reason === undefined ? undefined : boundDetail(input.reason)
+  return {
+    v: 1, at: new Date().toISOString(), ...input,
+    ...(reason === undefined ? {} : { reason }), ...(detail === undefined ? {} : { detail }),
+    host: hostname(), pid: process.pid,
+  }
 }
 
 function boundDetail(detail: string): string {

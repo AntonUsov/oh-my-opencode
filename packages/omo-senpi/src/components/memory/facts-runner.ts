@@ -59,6 +59,7 @@ export class FactsExtractorRunner {
       failures,
       now: this.now,
       markConsumed: (entries) => this.queue.markConsumed(entries),
+      receiptsDir: options.identity.paths.runtime,
       ...(options.writeTerminalSentinel === undefined ? {} : { write: options.writeTerminalSentinel }),
       ...(options.removeRunArtifact === undefined ? {} : { remove: options.removeRunArtifact }),
       ...(options.logger === undefined ? {} : { warn: (message, fields) => options.logger?.warn(message, fields) }),
@@ -193,6 +194,7 @@ export class FactsExtractorRunner {
         launchedAt,
         deadlineMs,
         terminationGraceMs: this.options.terminationGraceMs,
+        receiptsDir: this.options.identity.paths.runtime,
       })
     } catch (error) {
       await this.queue.releaseClaim(batch, claimId)

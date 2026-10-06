@@ -1,5 +1,6 @@
 import { join } from "node:path"
 
+import { emitMemoryReceipt, runOutcomeReceipt } from "../receipts-port"
 import {
   ensureReflectionCompletion,
   readReflectionCompletion,
@@ -96,8 +97,11 @@ export async function settleReservationRun(
     runId: current.runId,
     outcome: decision.outcome,
     finishedAt: finalizedAt,
+    generation: current.startedAt,
     ...(decision.integrationSha === undefined ? {} : { integrationSha: decision.integrationSha }),
+    ...(decision.reason === undefined ? {} : { reason: decision.reason }),
   })
+  await emitMemoryReceipt(context.identity.paths.runtime, runOutcomeReceipt(current, decision.outcome, decision), context.receipts, context.warn)
   return {
     runId: current.runId,
     outcome: decision.outcome,

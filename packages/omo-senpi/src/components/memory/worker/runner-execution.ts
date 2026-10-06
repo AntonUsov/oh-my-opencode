@@ -101,6 +101,7 @@ export async function executeReflectionRun(input: {
           maxOutputBytes: options.maxOutputBytes,
           sandbox: options.sandbox,
           supervisorPath: options.supervisorPath,
+          receiptsDir: options.identity.paths.runtime,
         })
       },
     })

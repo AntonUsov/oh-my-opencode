@@ -26,8 +26,10 @@ import {
   type ReservationStatePort,
 } from "./run-finalization"
 import { classifyGhostActive } from "./run-ghost-active"
+import { backfillRunReceipt } from "./run-receipt-backfill"
 import { classifyRunProcess, isLauncherDead, signalRecordedProcessGroup, waitUntil as waitForTime } from "./run-liveness"
 import { parseReservationRunLedger, type ReservationRunLedger } from "./reservation-run-ledger"
+import type { MemoryReceiptsPort, ReceiptWarn } from "../receipts-port"
 import { sweepReflectionRunOrphans, type ReflectionSweepLogger } from "./run-reconciliation-sweep"
 import { waitForRunSentinel, type SentinelWaitResult } from "./run-sentinel"
 import { sweepStrandedRunTemporaries } from "./run-temporaries"
@@ -49,6 +51,8 @@ export interface ReflectionRunReconciliationOptions {
   readonly logger?: ReflectionSweepLogger
   /** Bind-time maintenance defers when another session is scheduling this identity. */
   readonly deferOnSchedulerContention?: boolean
+  readonly receipts?: MemoryReceiptsPort
+  readonly warn?: ReceiptWarn
 }
 
 type ReconcileContext = Required<Pick<ReflectionRunReconciliationOptions, "now" | "hostname">>
@@ -76,7 +80,10 @@ export async function reconcileReflectionRuns(
       if (name === prelaunch.retiredRunId) continue
       const runDir = join(runsDir, name)
       await sweepStrandedRunTemporaries(runDir, context.now(), context.getPidLiveness)
-      if (existsSync(join(runDir, "final.json")) || existsSync(join(runDir, "abandoned.json"))) continue
+      if (["final.json", "abandoned.json", "quarantined.json"].some((file) => existsSync(join(runDir, file)))) {
+        await backfillRunReceipt(options.identity.paths.runtime, runDir, options.receipts, options.warn)
+        continue
+      }
       if (!existsSync(join(runDir, "ledger.json"))) continue
       const ledger = parseReservationRunLedger(await readRunJson<unknown>(join(runDir, "ledger.json")))
       const result = await reconcileRun(context, runDir, ledger)

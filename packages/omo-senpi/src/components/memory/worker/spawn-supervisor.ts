@@ -10,6 +10,7 @@ import {
   type RunLaunchManifest,
   type RunOutcome,
 } from "./run-artifacts"
+import { emitMemoryReceipt, runReceipt, type RunReceiptLedger } from "../receipts-port"
 import { requireRunMetadata } from "./spawn-metadata"
 import { describeReflectionLauncher } from "./launcher-identity"
 import { waitForRunCompletion } from "./run-sentinel"
@@ -39,6 +40,7 @@ export async function runReflectionChild(
     readonly sandbox?: ReflectionSandbox
     readonly supervisorPath?: string
     readonly now?: () => number
+    readonly receiptsDir?: string
   },
 ): Promise<ReflectionChildResult> {
   const graceMs = options.terminationGraceMs ?? DEFAULT_GRACE_MS
@@ -67,6 +69,7 @@ export async function runReflectionChild(
     terminationGraceMs: graceMs,
     maxOutputBytes,
     supervisorPath: options.supervisorPath,
+    ...(options.receiptsDir === undefined ? {} : { receiptsDir: options.receiptsDir }),
     ledger: {
       version: 1,
       runId: metadata.runId,
@@ -119,6 +122,7 @@ async function runSupervisedChild(input: {
   readonly maxOutputBytes: number
   readonly supervisorPath?: string
   readonly ledger: Readonly<Record<string, unknown>>
+  readonly receiptsDir?: string
 }): Promise<ReflectionChildResult> {
   await mkdir(input.runDir, { recursive: true, mode: 0o700 })
   const stdoutPath = join(input.runDir, "child-stdout.log")
@@ -160,6 +164,9 @@ async function runSupervisedChild(input: {
     windowsHide: true,
   })
   supervisor.unref()
+  if (input.receiptsDir !== undefined && input.attempt === 1) {
+    await emitMemoryReceipt(input.receiptsDir, runReceipt(launchedRun(input.ledger), "launched"))
+  }
   const outcomePath = join(input.runDir, "outcome.json")
   const launchPath = join(input.runDir, "launch.json")
   const publishingPath = join(input.runDir, "publishing.json")
@@ -223,6 +230,16 @@ async function runSupervisedChild(input: {
     stdout: readTail(stdoutPath, input.maxOutputBytes),
     stderr: readTail(stderrPath, input.maxOutputBytes),
     timedOut: outcome.timedOut,
+  }
+}
+
+function launchedRun(ledger: Readonly<Record<string, unknown>>): RunReceiptLedger {
+  return {
+    kind: ledger.kind === "dream" ? "dream" : "reflection",
+    runId: String(ledger.runId),
+    trigger: String(ledger.trigger),
+    ...(typeof ledger.origin === "string" ? { origin: ledger.origin } : {}),
+    startedAt: String(ledger.startedAt),
   }
 }
 

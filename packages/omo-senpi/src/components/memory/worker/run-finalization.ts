@@ -1,6 +1,7 @@
 import { existsSync } from "@oh-my-opencode/memory-core/fs"
 import { join } from "node:path"
 
+import { emitMemoryReceipt, runReceipt } from "../receipts-port"
 import {
   readRunJson,
   readRunTextTail,
@@ -144,7 +145,14 @@ export async function abandonReservationRun(
         runId: precedence.ledger.runId,
         outcome: "abandoned_unknown",
         abandonedAt,
+        generation: precedence.ledger.startedAt,
       })
+      await emitMemoryReceipt(
+        context.identity.paths.runtime,
+        runReceipt(precedence.ledger, "abandoned", { reason: "abandoned_unknown" }),
+        context.receipts,
+        context.warn,
+      )
       if (active?.runId === precedence.ledger.runId) {
         const transition = await context.reservation.complete(precedence.ledger.runId, "failed")
         if (transition.launch !== undefined) context.launch?.(transition.launch)
