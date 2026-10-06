@@ -185,7 +185,7 @@ describe("GitMemoryRepo secret screening", () => {
 
     // then
     expect((await repo.status()).trim()).toBe("")
-    expect(await readFile(join(dir, "reference/x.md"), "utf8")).toBe("clean body\n")
+    expect((await readFile(join(dir, "reference/x.md"), "utf8")).replace(/\r\n/g, "\n")).toBe("clean body\n")
     expect(await repo.show("HEAD", "reference/x.md")).toBe("clean body\n")
   })
 })
