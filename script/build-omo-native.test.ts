@@ -52,10 +52,12 @@ function recordingDependencies(input: {
 }
 
 describe("ensurePrebuiltNativeInputs", () => {
-  test("#given both prebuilt artifacts present #when ensuring #then no root build script runs", () => {
+  const omowrightRuntime = ["packages", "shared-skills", "skills", "browser", "runtime", "omowright", "index.js"].join(sep)
+
+  test("#given every prebuilt artifact present #when ensuring #then no root build script runs", () => {
     // given
     const { dependencies, probed, built } = recordingDependencies({
-      existing: ["packages/lsp-daemon/dist", "packages/ast-grep-mcp/dist/cli.js"],
+      existing: ["packages/lsp-daemon/dist", "packages/ast-grep-mcp/dist/cli.js", omowrightRuntime],
     })
 
     // when
@@ -65,6 +67,7 @@ describe("ensurePrebuiltNativeInputs", () => {
     expect(built).toEqual([])
     expect(probed.some((path) => path.endsWith(["packages", "lsp-daemon", "dist"].join(sep)))).toBe(true)
     expect(probed.some((path) => path.endsWith(["packages", "ast-grep-mcp", "dist", "cli.js"].join(sep)))).toBe(true)
+    expect(probed.some((path) => path.endsWith(omowrightRuntime))).toBe(true)
   })
 
   test("#given no prebuilt artifacts #when ensuring #then each input builds via its root script in order", () => {
@@ -75,13 +78,13 @@ describe("ensurePrebuiltNativeInputs", () => {
     ensurePrebuiltNativeInputs(dependencies)
 
     // then
-    expect(built).toEqual(["build:lsp-daemon", "build:ast-grep-mcp"])
+    expect(built).toEqual(["build:lsp-daemon", "build:ast-grep-mcp", "build:materialize-frontend"])
   })
 
   test("#given only the daemon dist missing #when ensuring #then only build:lsp-daemon runs", () => {
     // given
     const { dependencies, built } = recordingDependencies({
-      existing: ["packages/ast-grep-mcp/dist/cli.js"],
+      existing: ["packages/ast-grep-mcp/dist/cli.js", omowrightRuntime],
     })
 
     // when
@@ -89,6 +92,22 @@ describe("ensurePrebuiltNativeInputs", () => {
 
     // then
     expect(built).toEqual(["build:lsp-daemon"])
+  })
+
+  // Regression (issue #9661): the binary release pipeline runs the native staging chain with
+  // OMO_SKIP_MATERIALIZE=1, so stage-omowright-runtime.mjs never ran and the published binary's
+  // browser skill had no runtime. Only the omowright runtime missing must trigger its staging.
+  test("#given only the omowright runtime missing #when ensuring #then only build:materialize-frontend runs", () => {
+    // given
+    const { dependencies, built } = recordingDependencies({
+      existing: ["packages/lsp-daemon/dist", "packages/ast-grep-mcp/dist/cli.js"],
+    })
+
+    // when
+    ensurePrebuiltNativeInputs(dependencies)
+
+    // then
+    expect(built).toEqual(["build:materialize-frontend"])
   })
 
   test("#given a root build script exits nonzero #when ensuring #then the exit code surfaces", () => {
@@ -147,5 +166,12 @@ describe("plugin payload allowlist parity", () => {
     // when / then
     expect(PAYLOAD_DIRECTORIES).toContain("skills-conditional")
     expect(REQUIRED_PLUGIN_ARTIFACTS).toContain(join("skills-conditional", "x-search", "SKILL.md"))
+  })
+
+  // Regression (issue #9661): the browser skill's bundled omowright runtime is staged into the
+  // payload and must be required, or a binary built without it ships a browser skill that always
+  // fails to load omowright.
+  test("#given the browser skill omowright runtime #when checking the payload #then it is required", () => {
+    expect(REQUIRED_PLUGIN_ARTIFACTS).toContain(join("skills", "browser", "runtime", "omowright", "index.js"))
   })
 })
