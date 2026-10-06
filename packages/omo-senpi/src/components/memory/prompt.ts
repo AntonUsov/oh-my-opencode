@@ -4,6 +4,7 @@ import {
   MemoryBlockCache,
   markMemoryBlock,
   replaceMemoryBlock,
+  type ExternalProjectionLimits,
 } from "@oh-my-opencode/memory-core"
 
 import type { MemoryIdentityContext } from "./context"
@@ -39,6 +40,7 @@ export interface MemoryPromptInjectionOptions {
   readonly recordPin?: (record: ProjectionPinRecord) => void
   readonly onRepin?: (sessionId: string, reason: Exclude<ProjectionRepinReason, "first-turn">) => void
   readonly resolveCompileWarnTokens?: (identity: string) => number
+  readonly resolveProjectionLimits?: (identity: string) => ExternalProjectionLimits
   readonly resolveNudgeTurns?: (
     repo: GitMemoryRepo,
     sessionId: string,
@@ -108,8 +110,10 @@ export function createMemoryPromptHandler(
       ? { revision: await pins.peek(pinInput) }
       : await pins.advance({ ...pinInput, record: recordPin })
     if (turn.repinned !== undefined && turn.repinned !== "first-turn") options.onRepin?.(session.id, turn.repinned)
+    const projection = options.resolveProjectionLimits?.(context.identity)
     const block = await cache.compile(repo, `${MEMORY_PROMPT_TEMPLATE}:${context.identity}`, {
       agentId: context.identity,
+      ...(projection === undefined ? {} : { projection }),
     }, turn.revision)
     const pressureBlock = await addMemoryPressureMetadata(
       block,

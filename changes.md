@@ -1,3 +1,16 @@
+## 2026-10-07 - The memory file list in the prompt is bounded by recency, count and bytes (#9687)
+
+`<external_projection>`, the list of memory files outside `system/` at the end of the compiled
+memory block, had no limit. A long-lived corpus measured 157,834 bytes (about 39K tokens) on
+every turn. Each directory now lists its most recently committed files first, up to
+`memory.projection.max_entries_per_directory` (default 40). The whole list fits
+`memory.projection.max_bytes` (default 24576), with the largest directory giving up names first.
+Omitted names are counted with a pointer to read the directory. `0` disables a limit, and both
+at `0` reproduce the previous list byte for byte. `/doctor` reports names shown and omitted, the
+byte size, and the overflow when no listing fits the budget. Commit times per path are read incrementally and
+stored in the memory repo's git dir. After the first full read (about 9 s on a 12k-commit
+history), a new commit costs one short `git log` of the new range.
+
 ## 2026-10-06 - /doctor audits corpus structure and dream repairs it (#9652)
 
 Memory doctor now reports dangling links, invalid frontmatter, duplicate bodies,
