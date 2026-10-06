@@ -281,8 +281,9 @@ async function deliverThroughGateway(
   }
   const turn = options.callerTurnId?.()
   const cause = options.callerCause?.()
+  const name = options.callerName?.()?.trim()
   const sent = await engine.deliver({
-    sender: { kind: "session", durable_id: callerId, ...(turn === undefined ? {} : { turn_id: turn }), ...(cause === undefined ? {} : { cause_delivery_id: cause }) },
+    sender: { kind: "session", durable_id: callerId, ...(name === undefined || name === "" ? {} : { name }), ...(turn === undefined ? {} : { turn_id: turn }), ...(cause === undefined ? {} : { cause_delivery_id: cause }) },
     target: threadId,
     text: value.message,
     mode: value.delivery ?? "auto",

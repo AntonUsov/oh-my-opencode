@@ -3,6 +3,7 @@
 The gateway drain now hands the receiving session the sender and the message as written, apart from the provenance header:
 - `deliverySender` in `gateway/provenance.ts` builds the sender: `agent` with the sending session's id and its name at send time, `command_line` for `omo thread send`, or `external` with the platform and author.
 - `drain.ts` passes it with `display_text` to `admitExternalMessage`.
+- `thread_send` and `thread_handoff` give the gateway the caller's current session name (`callerName`, from `pi.getSessionName`). Without it, a live run labelled the message only "Sent by another agent", because the drain had nothing but the session id.
 
 The model still reads the `[OMO_GATEWAY v=1 ...]` header. senpi's terminal renders the sender as "Sent by another agent · <name>" or "Sent from the command line" (senpi#2819); a senpi without that support ignores the two fields.
 

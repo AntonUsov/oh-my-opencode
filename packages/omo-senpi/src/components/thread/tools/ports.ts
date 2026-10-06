@@ -103,6 +103,8 @@ export type ThreadToolSurfaceOptions = {
   readonly store: GatewayStore
   /** The caller's current turn (the gateway's per-turn fan-out budget is keyed by it); absent outside a turn. */
   readonly callerTurnId?: () => string | undefined
+  /** The caller session's current name, shown to a receiver as "Sent by another agent · <name>"; absent when it has none. */
+  readonly callerName?: () => string | undefined
   /**
    * The newest delivery whose message the caller's current run has consumed (`component.ts`
    * `RunContext.cause`), when one has: a send continues that causal root (hop, cycle and budget
