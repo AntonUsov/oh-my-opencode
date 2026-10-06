@@ -1,3 +1,16 @@
+## 2026-10-06 - The thread tools switch a terminal session's model and level and interrupt its turn (#9660)
+
+`thread_set_model`, `thread_set_reasoning` and `thread_interrupt` failed with `unsupported` against every terminal session, which is most live sessions. The client refused every command outside a fixed read-mostly list, and the terminal endpoint did not take them either.
+
+**What changed**
+- `live-surface.ts` asks a terminal once for `get_protocol_info` and remembers the `commands` it lists. A command the terminal lists is sent; any other is still refused as `unsupported` before a connection opens. A terminal on an older engine lists none and keeps the old behavior. Its refusal now says the terminal runs an engine from before terminal session controls, and how to get them.
+- `thread_list` rows carry `controls`, from `endpoint-controls.ts`: what a caller can do to that thread (`send`, `read`, `rename`, `set_model`, `set_reasoning`, `interrupt`). A host takes all six; an older terminal takes the first three.
+
+**Tests** (`live-surface-tui.test.ts`, against a terminal endpoint that answers as senpi's does):
+- a model switch, a supported and an unsupported level, an unknown model, an interrupt mid-turn and one on an idle session;
+- each row's `controls`, next to an older terminal and a host;
+- reverting to the fixed command list fails the test.
+
 ## 2026-10-05 - An idle gateway store no longer keeps its worker thread alive
 
 Every session that touches the gateway store (each terminal with a control endpoint, and every sender) started one store worker thread and kept it until the session ended. A measured idle worker retains 2.94 MB: an empty Bun worker plus the bundled store code and SQLite. That put the terminal control endpoint's idle cost at about 4.1 MB against the 3 MB budget.
