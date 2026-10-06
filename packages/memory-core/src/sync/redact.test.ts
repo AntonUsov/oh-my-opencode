@@ -290,5 +290,17 @@ describe("scanSecretLikeMaterial / redactSecretLikeMaterial", () => {
       expect(matches[0].end).toBe(pem.length)
       expect(redactSecretLikeMaterial(pem)).toBe("***")
     })
+
+    it("#then a zero-width character inside a marker label does not hide the block", () => {
+      // given
+      const pem = "note -----BEGIN RSA PRIV\u200bATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSk\n-----END RSA PRIVATE KEY----- tail"
+
+      // when
+      const matches = scanSecretLikeMaterial(pem)
+
+      // then
+      expect(matches.map((match) => match.class)).toContain("pem_block")
+      expect(redactSecretLikeMaterial(pem)).toBe("note *** tail")
+    })
   })
 })

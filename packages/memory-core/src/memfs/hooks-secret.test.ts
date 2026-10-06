@@ -39,26 +39,64 @@ describe("pre-commit hook secret screening", () => {
   })
 
   it("#given file names carrying shell metacharacters #when committed with a vendor token #then the hook refuses without evaluating the name", async () => {
-    // given: the names would execute if the hook interpolated them into its sh source
-    const dir = await createRepo()
+    // given: one fresh repository per name, so an earlier refused file cannot stay staged and fail
+    // a later commit on its own; each name would execute if the hook interpolated it into sh source
     const token = "xoxb-1234567890abcdefghij"
     const body = `---\ndescription: Z\n---\n\n${token}\n`
-    const backtickName = "reference/\u0060id\u0060.md"
+    const names = ["reference/$(printf probe).md", "reference/\u0060id\u0060.md"]
+
+    for (const name of names) {
+      const dir = await createRepo()
+
+      // when
+      const result = await commit(dir, { [name]: body }, "probe")
+
+      // then: the name's own blob is refused, and no probe/id side effect ran
+      expect(result.code).not.toBe(0)
+      expect(result.stderr).toContain("secret-like content (vendor_token)")
+      expect(result.stderr).not.toContain(token)
+      expect(existsSync(join(dir, "probe"))).toBe(false)
+      expect(result.stderr).not.toMatch(/^\d+$/m)
+    }
+  }, 30_000)
+
+  it("#given file names git quotes in its output #when committed with a vendor token #then the hook still scans each blob and refuses", async () => {
+    // given: git C-quotes names with non-ASCII bytes, quotes, backslashes and newlines; quotes,
+    // backslashes and newlines cannot be Windows file names, so those run on POSIX only
+    const body = "---\ndescription: Z\n---\n\nxoxb-1234567890abcdefghij\n"
+    const portable = ["reference/\uD55C\uAE00.md", "reference/caf\u00e9.md"]
+    const posixOnly = ["reference/a'b\"c.md", "reference/back\\slash.md", "reference/new\nline.md"]
+    const names = process.platform === "win32" ? portable : [...portable, ...posixOnly]
+
+    for (const name of names) {
+      const dir = await createRepo()
+
+      // when
+      const result = await commit(dir, { [name]: body }, "probe")
+
+      // then
+      expect(result.code).not.toBe(0)
+      expect(result.stderr).toContain("secret-like content (vendor_token)")
+      expect((await run(["git", "log", "--oneline"], dir)).code).not.toBe(0)
+    }
+  }, 60_000)
+
+  it("#given a rename that also adds a vendor token #when committed #then the hook scans the new blob and refuses", async () => {
+    // given: git detects renames by default, so a moved file shows as R, not A or M
+    const dir = await createRepo()
+    const body = `---\ndescription: Z\n---\n\n${"line\n".repeat(40)}`
+    await commit(dir, { "reference/old.md": body }, "seed")
+    await run(["git", "mv", "reference/old.md", "reference/new.md"], dir)
+    await writeFiles(dir, { "reference/new.md": `${body}xoxb-1234567890abcdefghij\n` })
+    await run(["git", "add", "-A"], dir)
 
     // when
-    const results = [
-      await commit(dir, { "reference/$(printf probe).md": body }, "probe one"),
-      // a double quote is not a legal Windows file name, so that probe runs on POSIX only
-      ...(process.platform === "win32" ? [] : [await commit(dir, { "reference/a'b\"c.md": body }, "probe two")]),
-      await commit(dir, { [backtickName]: body }, "probe three"),
-    ]
+    const result = await run(["git", "commit", "-m", "move"], dir)
 
-    // then: every name is refused on its blob, and no probe/id side effect ran
-    for (const result of results) expect(result.code).not.toBe(0)
-    expect(results.at(-1)?.stderr).toContain("secret-like content (vendor_token)")
-    expect(existsSync(join(dir, "probe"))).toBe(false)
-    expect(results.at(-1)?.stderr).not.toMatch(/^\d+$/)
-  })
+    // then
+    expect(result.code).not.toBe(0)
+    expect(result.stderr).toContain("reference/new.md contains secret-like content (vendor_token)")
+  }, 30_000)
 
   it("#given a staged deletion #when committed #then the hook does not read a missing blob and commits", async () => {
     // given

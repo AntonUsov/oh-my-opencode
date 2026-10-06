@@ -85,19 +85,20 @@ function normalizeForSecretScan(text: string): { shadow: string; map: number[] }
 export function scanSecretLikeMaterial(value: string): SecretMatch[] {
   if (!value) return []
   const matches: SecretMatch[] = []
-  let pemOffset = 0
-  while (true) {
-    const block = findPemBlock(value, pemOffset)
-    if (block === undefined) break
-    matches.push({ class: "pem_block", start: block.start, end: block.end })
-    pemOffset = block.end
-  }
   const { shadow, map } = normalizeForSecretScan(value)
   const toOriginalSpan = (start: number, end: number): { start: number; end: number } | undefined => {
     const originalStart = map[start]
     const originalLast = map[end - 1]
     if (originalStart === undefined || originalLast === undefined) return undefined
     return { start: originalStart, end: originalLast + 1 }
+  }
+  let pemOffset = 0
+  while (true) {
+    const block = findPemBlock(shadow, pemOffset)
+    if (block === undefined) break
+    const span = toOriginalSpan(block.start, block.end)
+    if (span !== undefined) matches.push({ class: "pem_block", ...span })
+    pemOffset = block.end
   }
   for (const [patternClass, source, flags] of SECRET_PATTERN_SOURCES) {
     const pattern = new RegExp(source, `${flags}g`)

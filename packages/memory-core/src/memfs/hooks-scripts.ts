@@ -30,6 +30,12 @@ export const HOOK_SECRET_PATTERNS = [
   { class: "vendor_token", ere: "(^|[^A-Za-z0-9_])(ghp|github_pat|glpat|xox[baprs])[-_][-_A-Za-z0-9]+([^A-Za-z0-9_-]|$)" },
 ] as const
 
+const SECRET_SCAN_LINES = HOOK_SECRET_PATTERNS.map(({ class: patternClass, ere }) => [
+  `      if printf '%s' "$blob" | grep -E -q -e '${ere}'; then`,
+  `        printf 'memory pre-commit: %s contains secret-like content (${patternClass})\\n' "$p"`,
+  "      fi",
+].join("\n")).join("\n")
+
 /**
  * Pre-commit validator for staged memory markdown.
  *
@@ -195,27 +201,22 @@ fi
 
 # Secret-like material backstop for hand commits (regex-only defense in depth;
 # the authoritative gates scan with evasion normalisation before this runs).
-# File names are read one per line and used ONLY as data in double quotes; a
-# repository-controlled name is never interpolated into the sh source.
+# Content is read by blob id from the raw diff (renames shown as an add, so a
+# moved file is scanned too), so no file name (quoted,
+# non-ASCII or carrying shell metacharacters) decides what gets scanned; the
+# name is only ever printed, as data, in git's own quoting.
 secret_failed=$(
-  git diff --cached --diff-filter=AM --name-only |
-    while IFS= read -r p; do
-      blob=$(git show ":$p" 2>/dev/null) || continue
-      if printf '%s' "$blob" | grep -E -q -e '(^|[^A-Za-z0-9_])AKIA[0-9A-Z]{16}([^A-Za-z0-9_]|$)'; then
-        printf 'memory pre-commit: %s contains secret-like content (aws_access_key)\\n' "$p"
-      fi
-      if printf '%s' "$blob" | grep -E -q -e '(^|[^A-Za-z0-9_])([Bb][Ee][Aa][Rr][Ee][Rr]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Ww][Dd])[[:space:]]*[=:][[:space:]]*[^[:space:]]{1,255}'; then
-        printf 'memory pre-commit: %s contains secret-like content (credential_assignment)\\n' "$p"
-      fi
-      if printf '%s' "$blob" | grep -E -q -e '(^|[^A-Za-z0-9_])[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn][[:space:]]*:[[:space:]]*[Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]+[^[:space:]]{1,255}'; then
-        printf 'memory pre-commit: %s contains secret-like content (authorization_header)\\n' "$p"
-      fi
-      if printf '%s' "$blob" | grep -E -q -e '(^|[^A-Za-z0-9_])sk-(proj-)?[-_A-Za-z0-9]+([^A-Za-z0-9_-]|$)'; then
-        printf 'memory pre-commit: %s contains secret-like content (openai_key)\\n' "$p"
-      fi
-      if printf '%s' "$blob" | grep -E -q -e '(^|[^A-Za-z0-9_])(ghp|github_pat|glpat|xox[baprs])[-_][-_A-Za-z0-9]+([^A-Za-z0-9_-]|$)'; then
-        printf 'memory pre-commit: %s contains secret-like content (vendor_token)\\n' "$p"
-      fi
+  git diff --cached --no-renames --diff-filter=AMT --raw --no-abbrev |
+    while IFS= read -r line; do
+      meta=\${line%%"$TAB"*}
+      p=\${line#*"$TAB"}
+      set -- $meta
+      [ "$2" = "160000" ] && continue
+      blob=$(git cat-file blob "$4" 2>/dev/null) || {
+        printf 'memory pre-commit: %s could not be read for secret screening\\n' "$p"
+        continue
+      }
+${SECRET_SCAN_LINES}
     done
 )
 if [ -n "$secret_failed" ]; then

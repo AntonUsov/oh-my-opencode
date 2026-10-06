@@ -79,7 +79,7 @@ export async function finalizeClaimedFactsRun(input: FinalizeClaimedFactsRunInpu
     applied = await applyWithRetries(input, records)
   } catch (error) {
     if (error instanceof MemorySecretError) {
-      await fail("secret_like_content", `refused: ${error.path} (${error.patternClass})`)
+      await fail("secret_like_content", error.message)
       return { status: "failed", runId }
     }
     await fail("invalid_extraction", describe(error))

@@ -54,6 +54,25 @@ async function failureDetail(result: Awaited<ReturnType<typeof validateCompletio
 }
 
 describe("reflection completion secret screening", () => {
+  it("#given a submodule whose path is secret-like #when validated #then it fails without echoing the path", async () => {
+    // given: a gitlink recorded straight into the index, the way a maintenance child could add one
+    const { worktree } = await fixture()
+    const exec = createNodeGitExec()
+    const head = (await exec.run(["rev-parse", "HEAD"], { cwd: worktree.dir, timeoutMs: 30_000 })).stdout.trim()
+    await exec.run(["update-index", "--add", "--cacheinfo", `160000,${head},reference/token=abc123456`], { cwd: worktree.dir, timeoutMs: 30_000 })
+    // an empty directory is an uninitialised submodule checkout, so the worktree stays clean
+    await mkdir(join(worktree.dir, "reference/token=abc123456"), { recursive: true })
+    await exec.run(["-c", "user.email=fixture@example.com", "-c", "user.name=fixture", "commit", "-qm", "add gitlink"], { cwd: worktree.dir, timeoutMs: 30_000 })
+
+    // when
+    const result = await validateCompletion(worktree, worktree.baseSha, worktree.exec)
+
+    // then
+    const detail = await failureDetail(result)
+    expect(detail).toContain("(submodule, file type)")
+    expect(detail).not.toContain("abc123456")
+  })
+
   it("#given a worktree whose changed file carries a PEM block #when validated #then it fails with the class and short sha and no merge happens", async () => {
     // given
     const { repo, worktree } = await fixture()

@@ -40,7 +40,7 @@ export async function findSecretLikeFailure(
 async function findCommitSecretFailure(run: CompletionGitRun, commit: string): Promise<string | null> {
   const records = await listCommitFileVersions(run, commit)
   const submodule = records.find((record) => record.dstMode === SUBMODULE_MODE)
-  if (submodule !== undefined) return `secret_like_content: ${submodule.path} (submodule, file type)`
+  if (submodule !== undefined) return `secret_like_content: ${redactSecretLikeMaterial(submodule.path)} (submodule, file type)`
   const introduced = records.filter((record) => !ZERO_SHA.test(record.dstSha))
   for (const record of introduced) {
     const hit = scanSecretLikeMaterial(record.path)[0]
