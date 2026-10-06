@@ -12,6 +12,7 @@ export const LOCK_DOMAINS = [
   "facts-runs",
   "notice",
   "memory-maintenance",
+  "receipts",
 ] as const
 
 export type LockDomain = (typeof LOCK_DOMAINS)[number]
@@ -71,4 +72,9 @@ export function factsRunsLockPath(locksDirectory: string): string {
 
 export function noticeLockPath(locksDirectory: string): string {
   return path.join(locksDirectory, "notice.lock")
+}
+
+/** Serialises appends to `receipts.jsonl`, and the read-then-append of an idempotent receipt. */
+export function receiptsLockPath(locksDirectory: string): string {
+  return path.join(locksDirectory, "receipts.lock")
 }

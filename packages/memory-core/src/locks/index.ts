@@ -15,6 +15,7 @@ export {
   memoryWriterLockPath,
   memoryUsageLockPath,
   noticeLockPath,
+  receiptsLockPath,
   reflectionSchedulerLockPath,
   runFinalizationLockPath,
   skillsUsageLockPath,
