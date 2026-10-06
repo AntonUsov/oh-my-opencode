@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.20] - 2026-10-06
+
 **Queued goals resume after stale or failed compaction feedback.** A goal message accepted while compaction was running could remain queued after the summary was rejected. The engine now attempts that continuation through its normal admission checks. Cancelling compaction does not restart work, and required-compaction limits still apply. ([senpi#2778](https://github.com/code-yeongyu/senpi/issues/2778), [senpi#2780](https://github.com/code-yeongyu/senpi/pull/2780))
 
 ### Added
