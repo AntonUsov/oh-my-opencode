@@ -8,10 +8,14 @@ import { tmpdir } from "node:os"
 import { basename, dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
+import { createHash } from "node:crypto"
 import { evalSmokeProviderSource } from "./omo-native-eval-smoke-provider.mjs"
 
 const sourceTree = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), "../.."))
 const exec = promisify(execFile)
+// OMO_SMOKE_JS_ISOLATION=process runs the JavaScript cells in the process-isolated kernel.
+const processIsolation = process.env.OMO_SMOKE_JS_ISOLATION === "process"
+const LARGE_ITEM = "x".repeat(4194304)
 
 function parseArgs(argv) {
   if (argv.length === 1) return resolve(argv[0])
@@ -33,6 +37,7 @@ function isolatedEnvironment(sandbox) {
     XDG_STATE_HOME: join(sandbox.home, "state"), XDG_CACHE_HOME: join(sandbox.home, "cache"),
     TMPDIR: sandbox.root, TMP: sandbox.root, TEMP: sandbox.root,
     OMO_CODING_AGENT_DIR: sandbox.agentDir, SENPI_CODING_AGENT_SESSION_DIR: sandbox.sessionDir,
+    ...(processIsolation ? { SENPI_CODEMODE_JS_ISOLATION: "process" } : {}),
     PI_OFFLINE: "1", PI_TELEMETRY: "0",
   }
 }
@@ -63,6 +68,11 @@ function createSandbox(binary) {
     ] } },
   }))
   writeFileSync(join(sandbox.cwd, "fixture.txt"), `${sandbox.marker}\n`)
+  // Sandbox cells on; a short foreground window so the large sandbox cell detaches while it still runs.
+  mkdirSync(join(sandbox.cwd, ".senpi"), { recursive: true })
+  writeFileSync(join(sandbox.cwd, ".senpi", "codemode.json"), JSON.stringify({
+    sandbox: { enabled: true }, cellTimeoutSeconds: 3, foregroundWindowSeconds: 4,
+  }))
   writeFileSync(sandbox.providerPath, evalSmokeProviderSource(sandbox.receiptPath))
   return sandbox
 }
@@ -186,6 +196,16 @@ function readEvalResults(sessionDir) {
     .filter((message) => message.role === "toolResult" && message.toolName === "eval")
 }
 
+// The large cell's completion notification names the file holding its full output.
+function largeCellSpill(sessionDir) {
+  const text = readdirSync(sessionDir).filter((name) => name.endsWith(".jsonl"))
+    .map((name) => readFileSync(join(sessionDir, name), "utf8")).join("\n")
+  const notice = text.split("\n").find((line) => line.includes("eval-smoke-5") && /[Ff]ull output: /u.test(line))
+  const path = notice?.match(/[Ff]ull output: ([^\s"\\\]]+)/u)?.[1]
+  if (path === undefined) throw new Error("no completion notification with a full-output path for the large sandbox cell")
+  return readFileSync(path, "utf8")
+}
+
 function textOf(message) {
   return message.content.filter((part) => part.type === "text").map((part) => part.text).join("\n")
 }
@@ -229,8 +249,10 @@ async function main() {
     if (/Cannot find|ENOENT|missing.*asset|Failed to load extension/i.test(result.stderr)) {
       throw new Error(`missing packaged asset: ${result.stderr.slice(-4000)}`)
     }
-    if (results.length !== 3) throw new Error(`expected js, py, list results, got ${results.length}`)
-    const [js, py, list] = results
+    if (results.length !== 7) {
+      throw new Error(`expected js, py, list, sandbox probe, sandbox store, large cell, peek; got ${results.length}`)
+    }
+    const [js, py, list, isolated, stored, large, peek] = results
     if (!textOf(js).includes("JS_OK 42") || !textOf(js).includes(sandbox.marker)) {
       throw new Error(`JavaScript/read receipt missing: ${textOf(js)}`)
     }
@@ -247,11 +269,33 @@ async function main() {
       list.details.cells.some((cell) => cell.language === language && cell.state === "completed"))) {
       throw new Error(`cell list receipt missing: ${textOf(list)}`)
     }
+    if (processIsolation && js.details?.runtime?.isolation !== "process") {
+      throw new Error(`process-isolated kernel not used: ${JSON.stringify(js.details?.runtime)}`)
+    }
+    // A positive read alone is no sandbox proof: the persistent kernel has process and fetch, the QuickJS VM has neither.
+    if (!textOf(isolated).includes(JSON.stringify(["undefined", "undefined", sandbox.marker]))) {
+      throw new Error(`sandbox probe: expected no ambient process/fetch and the marker, got ${textOf(isolated)}`)
+    }
+    // An isolated cell's own error is a settled cell result (status "error"), not a failed tool call.
+    const storedFailed = stored.isError || stored.details?.cells?.[0]?.status === "error"
+    if (!storedFailed || !textOf(stored).includes("eval_isolate_no_state")) {
+      throw new Error(`sandbox store() was not refused with eval_isolate_no_state: ${textOf(stored)}`)
+    }
+    if (large.isError || peek.isError) throw new Error(`large sandbox cell: ${textOf(large)} / ${textOf(peek)}`)
+    if (!textOf(peek).includes("x".repeat(256)) || textOf(peek).includes("BIG_DONE")) {
+      throw new Error(`peek did not show the streamed 4 MiB item before the cell settled: ${textOf(peek).slice(0, 400)}`)
+    }
+    const spill = largeCellSpill(sandbox.sessionDir)
+    const expected = createHash("sha256").update(LARGE_ITEM).digest("hex")
+    const actual = createHash("sha256").update(spill.match(/x{1024,}/u)?.[0] ?? "").digest("hex")
+    if (actual !== expected) throw new Error(`large item spill sha256 ${actual} != source ${expected}`)
     const receipts = readFileSync(sandbox.receiptPath, "utf8").trim().split("\n").map((line) => JSON.parse(line))
-    if (receipts.length !== 2 || receipts[0].kind !== "tool_call" ||
-        receipts[1].kind !== "tool_result" || receipts[0].id !== receipts[1].id ||
-        receipts[1].isError || !JSON.stringify(receipts[1].content).includes(sandbox.marker)) {
-      throw new Error("expected exactly one real host read through before/after hooks")
+    const reads = receipts.length / 2
+    if (receipts.length !== 4 || [0, 2].some((index) =>
+        receipts[index].kind !== "tool_call" || receipts[index + 1].kind !== "tool_result" ||
+        receipts[index].id !== receipts[index + 1].id || receipts[index + 1].isError ||
+        !JSON.stringify(receipts[index + 1].content).includes(sandbox.marker))) {
+      throw new Error(`expected two real host reads (kernel cell, sandbox cell) through before/after hooks, got ${reads}`)
     }
     const survivors = await ownedProcesses(sandbox.root)
     const sockets = readdirSync(sandbox.root, { recursive: true, withFileTypes: true })
@@ -262,6 +306,9 @@ async function main() {
     process.stdout.write(`PASS JS_OK 42 marker=${sandbox.marker} through one permission/hook read\n`)
     process.stdout.write("PASS PY_OK 42\n")
     process.stdout.write("PASS eval list contains JavaScript and Python cells\n")
+    process.stdout.write(`PASS sandbox cell: no process, no fetch, marker read through the host hook${processIsolation ? "; kernel cells ran process-isolated" : ""}\n`)
+    process.stdout.write("PASS sandbox store() refused with eval_isolate_no_state\n")
+    process.stdout.write(`PASS 4 MiB sandbox item visible through peek before settling; spill sha256=${expected}\n`)
     process.stdout.write("PASS renamed source tree; owned workers/interpreters=0 sockets=0\n")
   } finally {
     for (const { tree, hidden } of hiddenTrees.reverse()) renameSync(hidden, tree)
