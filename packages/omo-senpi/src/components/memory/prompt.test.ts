@@ -321,6 +321,57 @@ describe("createMemoryPromptHandler", () => {
     expect(result?.message?.content).not.toContain("compacted out")
   }, 30_000)
 
+  test("#given the nudge check times out in git #when before_agent_start compiles #then the turn proceeds with the memory block, no nudge, nothing thrown, and the failure is reported once", async () => {
+    // given
+    const { repo, context } = await fixture()
+    const failures: Array<{ input: string; sessionId: string; message: string }> = []
+    const pi = new FakeExtensionAPI()
+    pi.on("before_agent_start", createMemoryPromptHandler({
+      resolveContext: () => context,
+      createRepo: () => repo,
+      resolveNudgeTurns: async () => {
+        throw new Error("git log --fixed-strings --all-match timed out after 5000ms")
+      },
+      onNoticeInputFailed: (input, sessionId, error) => {
+        failures.push({ input, sessionId, message: error instanceof Error ? error.message : String(error) })
+      },
+    }))
+
+    // when
+    const result = await dispatchEvent(pi, beforeAgentStart("BASE PROMPT"), eventContext("session-1", liveBranch(2)))
+
+    // then
+    expect(result?.systemPrompt).toContain("BASE PROMPT")
+    // The compiled memory block (persona body "first") is still injected.
+    expect(result?.systemPrompt).toContain("first")
+    expect(result?.message?.content ?? "").not.toContain(MEMORY_NUDGE_METADATA_TOKEN)
+    expect(failures).toEqual([{ input: "nudge", sessionId: "session-1", message: "git log --fixed-strings --all-match timed out after 5000ms" }])
+  }, 30_000)
+
+  test("#given the soul notice read fails while the nudge works #when before_agent_start compiles #then the nudge still lands and only the soul notice is dropped", async () => {
+    // given
+    const { repo, context } = await fixture()
+    const failed: string[] = []
+    const pi = new FakeExtensionAPI()
+    pi.on("before_agent_start", createMemoryPromptHandler({
+      resolveContext: () => context,
+      createRepo: () => repo,
+      resolveNudgeTurns: async () => 3,
+      resolveSoulNotice: async () => {
+        throw new Error("notice lock unreadable")
+      },
+      onNoticeInputFailed: (input) => failed.push(input),
+    }))
+
+    // when
+    const result = await dispatchEvent(pi, beforeAgentStart("BASE PROMPT"), eventContext("session-1", liveBranch(2)))
+
+    // then
+    expect(result?.message?.content).toContain(MEMORY_NUDGE_METADATA_TOKEN)
+    expect(result?.message?.content).not.toContain(MEMORY_SOUL_METADATA_TOKEN)
+    expect(failed).toEqual(["soul"])
+  }, 30_000)
+
   test("#given a reflection soul notice #when before_agent_start compiles #then the late message carries the soul token and short sha", async () => {
     // given
     const { repo, context } = await fixture()

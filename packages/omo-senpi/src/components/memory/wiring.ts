@@ -3,6 +3,7 @@ import { MemoryBlockCache, RecallCorpusCache } from "@oh-my-opencode/memory-core
 import type { ComponentContext, SenpiExtensionAPI } from "../../extension/types"
 import { createDreamTriggerWiring, resolveDreamTriggerSettings } from "./dream-trigger"
 import { resolveMemorySettings } from "./identity-runtime"
+import { createMemoryMaintenance } from "./memory-maintenance"
 import { createMemoryNudgeWiring } from "./nudge-wiring"
 import type { PalacePeopleOptions } from "./palace/people"
 import { registerMemoryFilesystemPolicy } from "./policy-guard"
@@ -78,6 +79,7 @@ export function createMemoryWiring(options: MemoryWiringOptions): MemoryWiring {
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   })
   const kibitzerRef: { current?: KibitzerComposition } = {}
+  const maintenance = createMemoryMaintenance(options.logger === undefined ? {} : { logger: options.logger })
 
   async function flushSkillsUsageTrackers(signal?: AbortSignal): Promise<void> {
     for (const tracker of skillsUsageTrackersRef.current.values()) {
@@ -177,6 +179,7 @@ export function createMemoryWiring(options: MemoryWiringOptions): MemoryWiring {
       lastEventCtx.current = eventCtx
       reflectionLive.attach(sessionId)
       registerMemoryFilesystemPolicy(pi, identity)
+      maintenance.schedule(identity)
       await runtimeFor(identity).reconcile()
       if (branchEntryCount(eventCtx) > 0) {
         await journalWiringFor(identity).reconcileSession(eventCtx)

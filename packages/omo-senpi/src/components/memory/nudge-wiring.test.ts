@@ -198,6 +198,70 @@ describe("createMemoryNudgeWiring", () => {
     expect(await wiring.nudgeTurns(repo, "session-clear", context.identity)).toBeUndefined()
   }, 30_000)
 
+  test("#given a resumed session that saved memory in an earlier run #when its prompt checks the nudge #then the earlier save still resets the count", async () => {
+    // given
+    const { context, repo } = await fixture()
+    await writeFile(join(repo.dir, "earlier.md"), "earlier\n")
+    await repo.commitWrite(
+      ["earlier.md"],
+      "save memory\n\nOmo-Writer: memory-tool\nOmo-Session: session-resumed\nOmo-Turn: 3",
+      { agentId: context.identity, authorName: context.identity },
+    )
+    const pi = new MemoryFakeExtensionAPI()
+    const wiring = createMemoryNudgeWiring({
+      resolveContext: () => context,
+      resolveSettings: () => ({ enabled: true, everyUserTurns: 2 }),
+    })
+    wiring.register(pi)
+    const startedEarlier = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+
+    // when
+    await pi.dispatch("session_start", {}, eventContext("session-resumed", [
+      { type: "message", timestamp: startedEarlier, data: { role: "user" } },
+      {
+        type: "custom",
+        customType: ACCEPTED_TURNS_ENTRY_TYPE,
+        data: { version: 1, sessionId: "session-resumed", priorUserTurns: 4, sessionBaselineTurns: 0 },
+      },
+    ]))
+
+    // then: 4 accepted turns, saved at turn 3 -> 1 since the save, under the threshold of 2
+    expect(await wiring.nudgeTurns(repo, "session-resumed", context.identity)).toBeUndefined()
+  }, 30_000)
+
+  test("#given other sessions keep committing between prompts #when this session saves among their commits #then the next check sees the save", async () => {
+    // given
+    const { context, repo } = await fixture()
+    const pi = new MemoryFakeExtensionAPI()
+    const wiring = createMemoryNudgeWiring({
+      resolveContext: () => context,
+      resolveSettings: () => ({ enabled: true, everyUserTurns: 2 }),
+    })
+    wiring.register(pi)
+    await pi.dispatch("session_start", {}, eventContext("session-busy", [{
+      type: "custom",
+      customType: ACCEPTED_TURNS_ENTRY_TYPE,
+      data: { version: 1, sessionId: "session-busy", priorUserTurns: 2, sessionBaselineTurns: 0 },
+    }]))
+    expect(await wiring.nudgeTurns(repo, "session-busy", context.identity)).toBe(2)
+    const commit = async (file: string, session: string, turn: number) => {
+      await writeFile(join(repo.dir, file), `${file}\n`)
+      await repo.commitWrite(
+        [file],
+        `save memory\n\nOmo-Writer: memory-tool\nOmo-Session: ${session}\nOmo-Turn: ${turn}`,
+        { agentId: context.identity, authorName: context.identity },
+      )
+    }
+
+    // when
+    for (let index = 0; index < 25; index += 1) await commit(`other-${index}.md`, "session-other", index)
+    await commit("mine.md", "session-busy", 2)
+    for (let index = 25; index < 50; index += 1) await commit(`other-${index}.md`, "session-other", index)
+
+    // then
+    expect(await wiring.nudgeTurns(repo, "session-busy", context.identity)).toBeUndefined()
+  }, 60_000)
+
   test("#given a bound non-auto identity #when a memory MCP tool call starts #then unforgeable identity and accepted-turn provenance are injected in place", async () => {
     // given
     const { context } = await fixture()

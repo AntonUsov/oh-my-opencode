@@ -15,6 +15,8 @@ import type {
   GitCommitAuthor,
   GitCommitResult,
   GitLogOptions,
+  GitMaintenanceOptions,
+  GitMaintenanceResult,
   GitMemoryRepoOptions,
   GitMergeOptions,
   GitTreeBlobEntry,
@@ -24,7 +26,7 @@ import type {
 } from "./repo-types"
 
 export type {
-  GitCommitAuthor, GitCommitResult, GitLogOptions, GitMemoryRepoOptions,
+  GitCommitAuthor, GitCommitResult, GitLogOptions, GitMaintenanceOptions, GitMaintenanceResult, GitMemoryRepoOptions,
   GitMergeOptions, GitSeedFile, GitTreeBlobEntry, GitTreeSizedEntry, InitializeGitRepoOptions, MemoryCommit,
 } from "./repo-types"
 
@@ -180,9 +182,10 @@ export class GitMemoryRepo {
       argv.push("--fixed-strings", "--all-match", ...options.grep.map((pattern) => `--grep=${pattern}`))
     }
     if (options.limit !== undefined) argv.push("-n", String(options.limit))
+    if (options.since !== undefined) argv.push(`--since=${options.since.toISOString()}`)
     if (options.range !== undefined) argv.push(options.range)
     if (options.paths !== undefined && options.paths.length > 0) argv.push("--", ...options.paths)
-    const records = parseLogOutput((await this.git(argv)).stdout)
+    const records = parseLogOutput((await this.git(argv, options.timeoutMs)).stdout)
     if (options.includePaths !== true) return records
     return Promise.all(records.map(async (commit) => ({
       ...commit,
@@ -190,6 +193,30 @@ export class GitMemoryRepo {
         "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", commit.sha,
       ])).stdout),
     })))
+  }
+
+  /**
+   * Packs loose objects. Commits never run `gc --auto` (`gc.auto=0`, so a commit is never held up by a
+   * repack), so without this a long-lived repo collects tens of thousands of loose objects and every
+   * history walk slows down. git's `loose-objects` task writes them into a new pack (it deletes loose
+   * copies only of objects that were already packed before it ran), then `prune-packed` deletes the
+   * loose copies of everything now in a pack. Both only ever remove an object that a pack also holds,
+   * so they are safe while other processes keep committing; git's maintenance lock keeps two
+   * `maintenance run`s from overlapping. (`incremental-repack` is left out: it needs a multi-pack-index
+   * and fails on a repo that never had one.)
+   */
+  async maintain(options: GitMaintenanceOptions): Promise<GitMaintenanceResult> {
+    const looseObjectsBefore = await this.countLooseObjects()
+    if (looseObjectsBefore < options.minLooseObjects) return { status: "skipped", looseObjects: looseObjectsBefore }
+    await this.git(["maintenance", "run", "--task=loose-objects", "--quiet"], options.timeoutMs)
+    await this.git(["prune-packed", "--quiet"], options.timeoutMs)
+    return { status: "packed", looseObjectsBefore, looseObjectsAfter: await this.countLooseObjects() }
+  }
+
+  private async countLooseObjects(): Promise<number> {
+    const { stdout } = await this.git(["count-objects", "-v"])
+    const count = /^count: (\d+)$/m.exec(stdout)?.[1]
+    return count === undefined ? 0 : Number(count)
   }
 
   async worktreeAdd(path: string, branch: string, startPoint = "HEAD"): Promise<void> {
@@ -264,16 +291,16 @@ export class GitMemoryRepo {
     return head
   }
 
-  private async git(argv: readonly string[]): Promise<GitExecResult> {
-    const result = await this.gitResult(argv)
+  private async git(argv: readonly string[], timeoutMs?: number): Promise<GitExecResult> {
+    const result = await this.gitResult(argv, undefined, timeoutMs)
     if (result.code !== 0) throw commandError(argv, result)
     return result
   }
 
-  private gitResult(argv: readonly string[], stdin?: string): Promise<GitExecResult> {
+  private gitResult(argv: readonly string[], stdin?: string, timeoutMs = GIT_TIMEOUT_MS): Promise<GitExecResult> {
     return this.exec.run(argv, {
       cwd: this.dir,
-      timeoutMs: GIT_TIMEOUT_MS,
+      timeoutMs,
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
       ...(stdin === undefined ? {} : { stdin }),
     })
