@@ -35,7 +35,7 @@ interface FakeEngine {
 
 function processRunner(
   capabilities: readonly string[],
-  options: { readonly retryFallback?: "refuse" | "hang"; readonly fallbackChainDeadlineMs?: number } = {},
+  options: { readonly retryFallback?: "refuse" | "hang" | "exit"; readonly fallbackChainDeadlineMs?: number } = {},
 ): FakeEngine {
   const warnings: string[] = []
   const log = join(tempDir(), "commands.jsonl")
@@ -157,5 +157,20 @@ describe("a process-runner child's own fallback chain (#9582)", () => {
     expect(engine.warnings).toHaveLength(1)
     expect(engine.warnings[0]).toContain("st_p7")
     expect(engine.warnings[0]).toContain("no answer")
+  })
+
+  test("#given a child that exits while its chain is being sent #when it starts #then the start fails on the dead child and the warning says it exited, not that the chain was refused", async () => {
+    // given
+    const engine = processRunner(["retry_fallback_command"], { retryFallback: "exit" })
+
+    // when
+    const started = engine.runner.start(spec("st_p8", CHAINED))
+
+    // then
+    await expect(started).rejects.toMatchObject({ failure: { kind: "child-prompt-failed", rejected_while: "exited" } })
+    expect(engine.warnings).toHaveLength(1)
+    expect(engine.warnings[0]).toContain("st_p8")
+    expect(engine.warnings[0]).toContain("exited")
+    expect(engine.warnings[0]).not.toContain("refused")
   })
 })

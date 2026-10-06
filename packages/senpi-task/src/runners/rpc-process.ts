@@ -144,6 +144,11 @@ export class RpcProcessRunner {
       this.noticeFallbackChainUnsupported()
       return
     }
+    // A child that died meanwhile fails on its first prompt next; the warning must not blame the engine.
+    if (client.exited) {
+      this.onWarning(`task ${spec.task_id}: its fallback chain was not applied because the child exited while it was being sent`)
+      return
+    }
     const reason = outcome === "timeout" ? `no answer within ${this.fallbackChainDeadlineMs} ms` : outcome.refused
     this.onWarning(
       `task ${spec.task_id}: its fallback chain was not applied (${reason}), so it switches to a fallback model ` +
