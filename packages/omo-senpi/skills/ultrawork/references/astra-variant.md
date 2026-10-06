@@ -28,6 +28,12 @@ are named in its prompt and read there, not here.
    it. Before a change that depends on review, PR, issue, or branch
    state, refresh that state and preserve existing ordering/policy.
 
+## run-step
+4. RUN: the real-surface scenario the criterion named (channel table
+   above; auxiliary surface for CLI- or data-shaped criteria), end to
+   end, yourself, plus the step-2 tests. Paste the artifact path into
+   the notepad.
+
 ## cleanup-step
 5. CLEANUP: before you report, tear down every process, session, port,
    container, and temp path the QA in step 4 started, and note it in
@@ -45,5 +51,15 @@ are named in its prompt and read there, not here.
   unrelated bug you ran into — is reported in the final message or
   filed as an issue with reproduction, not fixed in this run; a
   deferral never turns a criterion into PASS.
+
+## stop-goal-ledger
+- The STOP GOAL: every scenario PASSES with captured evidence, every QA
+  resource is torn down, notepad is current, and (if gate triggered)
+  reviewer approved unconditionally. Above ALL of that, the
+
+## leftover-qa
+- Leftover QA state (live process, `tmux` session, browser context,
+  bound port, temp file / dir) means NOT done. Tear it down, note it in
+  the notepad, then continue.
 
 ## claim-done

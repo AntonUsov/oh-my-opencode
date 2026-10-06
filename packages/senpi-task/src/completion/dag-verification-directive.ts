@@ -18,4 +18,4 @@ Read the node's VERIFY output against the scope its prompt set, in both directio
 If a deliverable is missing, partial, unproven, or out of scope, send corrective instructions to THIS node (workflow action "send" with this run_id and node_id; "retry" when it cannot be continued) and require the fix with its VERIFY output.`
 
 export const ASTRA_DAG_RUN_VERIFICATION_DIRECTIVE = `DAG RUN COMPLETION.
-The run's verification node owns the combined checks; read its output against the run's requirements and the node summaries above. Rerun a check only when that output is missing, failing, or contradicts a requirement; correct incomplete or out-of-scope work through the affected node. Report unresolved failures or blockers.`
+The run's verification node owns the combined checks: read its output against the run's requirements and the node summaries above. A run without one gets a single pass of the checks its requirements name, run once. Rerun a check only when its output is missing, failing, or contradicts a requirement; correct incomplete or out-of-scope work through the affected node. Report unresolved failures or blockers.`

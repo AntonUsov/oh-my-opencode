@@ -347,10 +347,12 @@ Until every success criterion PASSES with its evidence captured:
    NO test. Before a change that depends on review, PR, issue, or
    branch state, refresh that state and preserve existing ordering/policy.
 <!-- omo-ultrawork-astra:change-step:end -->
+<!-- omo-ultrawork-astra:run-step:start -->
 4. RUN: the real-surface scenario the criterion named (channel table
    above; auxiliary surface for CLI- or data-shaped criteria), end to
    end, yourself, plus the step-2 tests; a reproduction now passes.
    Paste the artifact path into the notepad.
+<!-- omo-ultrawork-astra:run-step:end -->
 <!-- omo-ultrawork-astra:cleanup-step:start -->
 5. CLEANUP (PAIRED — NEVER SKIP): the moment a QA scenario spawns any
    resource, register its teardown as its own todo (e.g.
@@ -544,18 +546,22 @@ commits this session — then stage + draft the message instead.
 - After each result, ask whether the user's core request can now be
   answered with useful evidence in hand. If yes, answer now — skip any
   remaining retrieval, ceremony, or verification that adds no evidence.
+<!-- omo-ultrawork-astra:stop-goal-ledger:start -->
 - The STOP GOAL: every scenario PASSES with captured evidence, every
   cleanup receipt is recorded, notepad is current, and (if gate
   triggered) reviewer approved unconditionally. Above ALL of that, the
+<!-- omo-ultrawork-astra:stop-goal-ledger:end -->
   decisive test — outranking every other consideration — is: are the
   completion conditions FUNDAMENTALLY fulfilled, is the user's problem
   ACTUALLY SOLVED in observable behavior? If no, you are NOT done,
   whatever the ledger says. If yes, deliver the final message and STOP
   — no hesitation, no extra verification pass, no polish loop. Work
   past the stop goal is scope creep, not diligence.
+<!-- omo-ultrawork-astra:leftover-qa:start -->
 - Leftover QA state (live process, `tmux` session, browser context,
   bound port, temp file / dir) means NOT done. Tear it down, record
   the receipt, then continue.
+<!-- omo-ultrawork-astra:leftover-qa:end -->
 - After 2 identical failed attempts at one step, surface what was tried
   and ask the user through the question tool before another retry; if
   the question times out, continue on best judgment.
