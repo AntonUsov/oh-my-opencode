@@ -108,4 +108,27 @@ describe("/people command", () => {
     expect(ctx.ui.notifications).toEqual([{ message: text, level: "error" }])
   }, 30_000)
 
+  test("#given a card line carrying an aws key #when /people renders the card #then the key is masked", async () => {
+    // given
+    const { root, identity } = await tempIdentity()
+    tempDirs.push(root)
+    await seededRepo(identity, [
+      {
+        relativePath: "people/alice-wong/card.md",
+        content: ["---", "description: Person - Alice Wong", "kind: person", "---", "", "IDENTITY: engineer", "ATTRIBUTE: AKIAABCDEFGHIJKLMNOP", ""].join("\n"),
+      },
+    ])
+    const deps = fakeDeps(identity)
+    const pi = new MemoryFakeExtensionAPI()
+    registerPeopleCommand(pi, deps)
+    const ctx = fakeCommandContext()
+
+    // when
+    const text = await invoke(pi, "people", "alice-wong", ctx)
+
+    // then
+    expect(text).not.toContain("AKIAABCDEFGHIJKLMNOP")
+    expect(text).toContain("***")
+    expect(ctx.ui.notifications.at(-1)).toEqual({ message: text, level: "info" })
+  }, 30_000)
 })
