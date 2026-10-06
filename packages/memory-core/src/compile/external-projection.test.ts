@@ -71,6 +71,37 @@ describe("renderExternalProjection limits", () => {
     expect(text).toMatch(/^zz\/: entry-29\.md, .* \(\+\d+ more; read \$MEMORY_DIR\/zz\/ to list\)$/m)
   })
 
+  it("#given a budget one byte below the next larger listing #when fitted #then the largest listing that fits is kept, line breaks counted", () => {
+    // given
+    const wide = Array.from({ length: 30 }, (_, index) => `zz/entry-${String(index).padStart(2, "0")}.md`)
+    const paths = ["aa/x1.md", "aa/x2.md", ...wide]
+    const times = at(Object.fromEntries(paths.map((path, index) => [path, index])))
+    const ten = renderExternalProjection(paths, { times, limits: { maxEntriesPerDirectory: 10, maxBytes: 0 } })
+    const eleven = renderExternalProjection(paths, { times, limits: { maxEntriesPerDirectory: 11, maxBytes: 0 } })
+
+    // when
+    const limits = { maxEntriesPerDirectory: 0, maxBytes: bytes(eleven) - 1 }
+    const text = renderExternalProjection(paths, { times, limits })
+
+    // then
+    expect(text).toBe(ten)
+    expect(renderExternalProjectionStats(paths, { times, limits }).overflow).toBe(false)
+  })
+
+  it("#given short names whose omitted-names markers outweigh them #when the budget is just under the full listing #then the render is never larger than the uncapped one", () => {
+    // given
+    const paths = Array.from({ length: 12 }, (_, index) => [`d${index}/a.md`, `d${index}/b.md`]).flat()
+    const full = renderExternalProjection(paths, { times: at({}), limits: { maxEntriesPerDirectory: 0, maxBytes: 0 } })
+
+    // when
+    const limits = { maxEntriesPerDirectory: 0, maxBytes: bytes(full) - 1 }
+    const text = renderExternalProjection(paths, { times: at({}), limits })
+
+    // then
+    expect(bytes(text)).toBeLessThanOrEqual(bytes(full))
+    expect(renderExternalProjectionStats(paths, { times: at({}), limits })).toMatchObject({ overflow: true, bytes: bytes(text) })
+  })
+
   it("#given a budget equal to the exact size of the full render #when fitted #then nothing is omitted", () => {
     // given
     const paths = ["a/1.md", "a/2.md", "b/1.md", "b/2.md", "c/1.md"]
@@ -95,9 +126,10 @@ describe("renderExternalProjection limits", () => {
     expect(text).toContain("reference/***/: a.md (+1 more; read $MEMORY_DIR/reference/ to list)")
   })
 
-  it("#given a budget below the floor #when rendered #then the floor render is returned and the overflow is reported", () => {
+  it("#given long names and a budget below the floor #when rendered #then the floor render is returned and the overflow is reported", () => {
     // given
-    const paths = ["ARCHIVE.md", "a/x.md", "a/y.md", "b/z.md"]
+    const long = "a-name-long-enough-to-outweigh-its-omitted-names-marker"
+    const paths = [`${long}.md`, ...Array.from({ length: 8 }, (_, index) => `a/${long}-${index}.md`), `b/${long}.md`]
     const input = { times: at({}), limits: { maxEntriesPerDirectory: 0, maxBytes: 1 } }
 
     // when
@@ -108,11 +140,25 @@ describe("renderExternalProjection limits", () => {
     expect(text).toBe([
       "<external_projection>",
       "$MEMORY_DIR/: (+1 more; read $MEMORY_DIR/ to list)",
-      "a/: (+2 more; read $MEMORY_DIR/a/ to list)",
+      "a/: (+8 more; read $MEMORY_DIR/a/ to list)",
       "b/: (+1 more; read $MEMORY_DIR/b/ to list)",
       "</external_projection>",
     ].join("\n"))
-    expect(stats).toEqual({ shown: 0, omitted: 4, bytes: bytes(text), maxBytes: 1, overflow: true })
+    expect(stats).toEqual({ shown: 0, omitted: 10, bytes: bytes(text), maxBytes: 1, overflow: true })
+  })
+
+  it("#given short names whose full listing is smaller than the floor #when the budget is below both #then the full listing is returned and the overflow is reported", () => {
+    // given
+    const paths = ["ARCHIVE.md", "a/x.md", "a/y.md", "b/z.md"]
+    const input = { times: at({}), limits: { maxEntriesPerDirectory: 0, maxBytes: 1 } }
+
+    // when
+    const text = renderExternalProjection(paths, input)
+    const stats = renderExternalProjectionStats(paths, input)
+
+    // then
+    expect(text).toBe(renderExternalProjection(paths))
+    expect(stats).toEqual({ shown: 4, omitted: 0, bytes: bytes(text), maxBytes: 1, overflow: true })
   })
 
   it("#given equal commit times #when ordered #then names break the tie, and names without a time come last", () => {

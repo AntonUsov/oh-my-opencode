@@ -7,7 +7,7 @@ every turn. Each directory now lists its most recently committed files first, up
 `memory.projection.max_bytes` (default 24576), with the largest directory giving up names first.
 Omitted names are counted with a pointer to read the directory. `0` disables a limit, and both
 at `0` reproduce the previous list byte for byte. `/doctor` reports names shown and omitted, the
-byte size, and an overflow below the floor. Commit times per path are read incrementally and
+byte size, and the overflow when no listing fits the budget. Commit times per path are read incrementally and
 stored in the memory repo's git dir. After the first full read (about 9 s on a 12k-commit
 history), a new commit costs one short `git log` of the new range.
 

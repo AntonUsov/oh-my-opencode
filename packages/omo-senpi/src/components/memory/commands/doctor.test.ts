@@ -436,7 +436,7 @@ describe("/doctor", () => {
     expect(text).toMatch(/^\[warn\] projection: 1 entries shown, 1 omitted, \d+ bytes \(limits 1\/dir, no byte limit\)$/m)
   })
 
-  test("#given a byte limit below the floor #when doctor runs #then the overflow is reported", async () => {
+  test("#given a byte limit no listing fits #when doctor runs #then the overflow is reported with the smallest listing", async () => {
     // given
     const { identity, pi, ctx } = await harness({
       seeded: false,
@@ -453,7 +453,7 @@ describe("/doctor", () => {
     const text = await invoke(pi, "doctor", "", ctx)
 
     // then
-    expect(text).toMatch(/^\[warn\] projection: 0 entries shown, 1 omitted, \d+ bytes \(limits 40\/dir, 10 bytes\); exceeds max_bytes by \d+ bytes \(floor\)$/m)
+    expect(text).toMatch(/^\[warn\] projection: 1 entries shown, 0 omitted, \d+ bytes \(limits 40\/dir, 10 bytes\); no listing fits max_bytes, the smallest is \d+ bytes over$/m)
   })
 
   test("#given a skill missing name frontmatter #when doctor runs #then the repair helper reports the fix", async () => {

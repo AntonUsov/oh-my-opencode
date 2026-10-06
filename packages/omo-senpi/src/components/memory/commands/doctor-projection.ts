@@ -15,7 +15,7 @@ export async function checkProjection(
   const bytes = limits.maxBytes > 0 ? `${limits.maxBytes} bytes` : "no byte limit"
   const detail = `${stats.shown} entries shown, ${stats.omitted} omitted, ${stats.bytes} bytes (limits ${perDirectory}, ${bytes})`
   if (stats.overflow) {
-    return { name: "projection", level: "warn", detail: `${detail}; exceeds max_bytes by ${stats.bytes - stats.maxBytes} bytes (floor)` }
+    return { name: "projection", level: "warn", detail: `${detail}; no listing fits max_bytes, the smallest is ${stats.bytes - stats.maxBytes} bytes over` }
   }
   return { name: "projection", level: stats.omitted > 0 ? "warn" : "ok", detail }
 }

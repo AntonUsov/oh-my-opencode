@@ -3,7 +3,7 @@
 The compiled memory block ends with `<external_projection>`, which named every memory file outside `system/` in name order with no limit. A real long-lived corpus measured 3,281 files and 157,834 bytes (about 39K tokens) on every turn, with 1,962 names on one line.
 
 - `components/memory/prompt.ts`: the handler passes the identity's projection limits into `MemoryBlockCache.compile`. `wiring-static.ts` reads them from the memory settings; `projection-limits.ts` merges a per-agent `agents.<name>.projection` over the base.
-- `commands/doctor-projection.ts`: `/doctor` gains a `projection` line with the names shown and omitted and the byte size against the limits. It is `warn` when names are omitted or the byte budget is below the floor. `doctor-runtime.ts` adds it after `tokens`.
+- `commands/doctor-projection.ts`: `/doctor` gains a `projection` line with the names shown and omitted and the byte size against the limits. It is `warn` when names are omitted or no listing fits the byte budget. `doctor-runtime.ts` adds it after `tokens`.
 - Tests:
   - `prompt.test.ts`: a per-directory limit of 1 shows one name and counts the other two.
   - `doctor.test.ts`: the in-limits, omitted and overflow lines.
