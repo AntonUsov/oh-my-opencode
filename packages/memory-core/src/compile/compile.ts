@@ -2,10 +2,12 @@ import type { GitMemoryRepo } from "../git"
 import { parseMemoryFile } from "../memfs/frontmatter"
 import { redactSecretLikeMaterial } from "../sync/redact"
 import {
+  DEFAULT_EXTERNAL_PROJECTION_LIMITS,
   renderExternalProjection,
-  renderSystemTree,
-  type CompiledSystemFile,
-} from "./render"
+  type ExternalProjectionInput,
+  type ExternalProjectionLimits,
+} from "./external-projection"
+import { renderSystemTree, type CompiledSystemFile } from "./render"
 
 const PERSONA_PATH = "system/persona.md"
 const IDENTITY_PATH = "system/identity.md"
@@ -14,6 +16,8 @@ const REMINDER =
 
 export interface CompileMemoryBlockOptions {
   agentId: string
+  /** Bounds `<external_projection>`; omitted means `DEFAULT_EXTERNAL_PROJECTION_LIMITS`. */
+  projection?: ExternalProjectionLimits
 }
 
 export async function compileMemoryBlock(
@@ -39,9 +43,21 @@ export async function compileMemoryBlockAtRevision(
     ? await readSystemFiles(repo, revision, paths.filter(isOtherSystemMarkdown))
     : []
   const externalPaths = paths.filter(isExternalPath)
-  const projection = renderProjection(persona, identity, systemFiles, externalPaths)
+  const external = await projectionInput(repo, revision, externalPaths, options.projection)
+  const projection = renderProjection(persona, identity, systemFiles, externalPaths, external)
   const metadata = renderMetadata(options)
   return [projection, metadata].filter((part) => part.length > 0).join("\n\n")
+}
+
+async function projectionInput(
+  repo: GitMemoryRepo,
+  revision: string | null,
+  externalPaths: readonly string[],
+  limits: ExternalProjectionLimits = DEFAULT_EXTERNAL_PROJECTION_LIMITS,
+): Promise<ExternalProjectionInput> {
+  const bounded = limits.maxEntriesPerDirectory > 0 || limits.maxBytes > 0
+  const times = bounded && revision && externalPaths.length > 0 ? await repo.pathCommitTimes(revision) : new Map<string, number>()
+  return { times, limits }
 }
 
 async function readSystemFiles(
@@ -76,6 +92,7 @@ function renderProjection(
   identity: CompiledSystemFile | undefined,
   systemFiles: readonly CompiledSystemFile[],
   externalPaths: readonly string[],
+  external: ExternalProjectionInput,
 ): string {
   if (!persona && !identity && systemFiles.length === 0 && externalPaths.length === 0) return ""
   const lines = [REMINDER]
@@ -98,7 +115,7 @@ function renderProjection(
   if (systemFiles.length > 0 || externalPaths.length > 0) {
     lines.push("", "<memory>")
     if (systemFiles.length > 0) lines.push(renderSystemTree(systemFiles))
-    if (externalPaths.length > 0) lines.push(renderExternalProjection(externalPaths))
+    if (externalPaths.length > 0) lines.push(renderExternalProjection(externalPaths, external))
     lines.push("</memory>")
   }
   return lines.join("\n")

@@ -59,35 +59,6 @@ function renderSystemNode(
   }
 }
 
-export function renderExternalProjection(paths: readonly string[]): string {
-  const filesByDirectory = new Map<string, string[]>()
-  for (const path of paths) {
-    const parts = path.split("/").filter(Boolean)
-    const name = parts.pop()
-    if (name === undefined) continue
-    const directory = parts.length > 0 ? `${parts.join("/")}/` : ""
-    const names = filesByDirectory.get(directory)
-    if (names) names.push(name)
-    else filesByDirectory.set(directory, [name])
-  }
-
-  const rootNames = filesByDirectory.get("")
-  const lines = [
-    "<external_projection>",
-    rootNames ? `${MEMORY_DIR}/: ${listNames(rootNames)}` : `${MEMORY_DIR}/`,
-  ]
-  for (const directory of [...filesByDirectory.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b))) {
-    const safeDirectory = `${directory.split("/").filter(Boolean).map(redactSecretLikeMaterial).join("/")}/`
-    lines.push(`${safeDirectory}: ${listNames(filesByDirectory.get(directory) ?? [])}`)
-  }
-  lines.push("</external_projection>")
-  return lines.join("\n")
-}
-
-function listNames(names: string[]): string {
-  return names.sort((a, b) => a.localeCompare(b)).map(redactSecretLikeMaterial).join(", ")
-}
-
 export function markMemoryBlock(identity: string, block: string): string {
   return `<!-- senpi-memory:${identity}:begin -->\n${block}\n<!-- senpi-memory:${identity}:end -->`
 }
