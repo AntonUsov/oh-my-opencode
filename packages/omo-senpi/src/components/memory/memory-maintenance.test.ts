@@ -203,4 +203,23 @@ describe("createMemoryMaintenance", () => {
     // then
     expect(execFileSync("git", ["cat-file", "-p", pending], { cwd: repo.dir, encoding: "utf8" })).toBe("staged by a writer\n")
   }, 60_000)
+
+  test("#given a shared host where one session exits before its pass #when another session binds later #then that session's pass runs", async () => {
+    // given
+    const { context, repo } = await identityWithHistory(20)
+    const log = recorder()
+    const host = createMemoryMaintenance({ logger: log.logger, delayMs: 0, minLooseObjects: 10 })
+    host.schedule(context)
+    host.dispose()
+    await host.settled()
+    expect(log.info).toEqual([])
+
+    // when
+    host.schedule(context)
+    await host.settled()
+
+    // then
+    expect(log.info).toEqual(["omo-senpi memory repo packed"])
+    expect(looseObjects(repo.dir)).toBe(0)
+  }, 60_000)
 })

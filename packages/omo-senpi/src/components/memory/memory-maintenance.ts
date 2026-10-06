@@ -31,7 +31,10 @@ export interface MemoryMaintenanceOptions {
 export interface MemoryMaintenance {
   /** Schedules one background pass for this identity; repeated calls in this process are no-ops. */
   schedule(context: MemoryIdentityContext): void
-  /** Cancels passes not yet started and stops a running one (session exit). */
+  /**
+   * Cancels passes not yet started and stops a running one (session exit). The scheduler stays usable:
+   * a shared host keeps serving other sessions, and the next session to bind schedules a fresh pass.
+   */
   dispose(): void
   /** Resolves once every scheduled pass has run (or failed, or been disposed). */
   settled(): Promise<void>
@@ -49,7 +52,8 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
  * a repack; this background pass is what packs the loose objects instead.
  *
  * - One runner per identity across every session and process: the pass holds the identity's
- *   `memory-maintenance` lock and a session that finds it held skips (it never waits).
+ *   `memory-maintenance` lock and a session that finds it held skips (it never waits). This lock, not
+ *   git, is what keeps two passes apart.
  * - At most once per interval: the stamp lives in the repo's own config and is read and written while
  *   holding that lock, so many sessions starting together still produce one pass.
  * - Safe with concurrent commits: `GitMemoryRepo.maintain()` only packs and then deletes loose copies of
@@ -66,23 +70,23 @@ export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}):
   const minLooseObjects = options.minLooseObjects ?? DEFAULT_MIN_LOOSE_OBJECTS
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const now = options.now ?? Date.now
-  const abort = new AbortController()
+  let abort = new AbortController()
   const scheduled = new Set<string>()
   const timers = new Map<ReturnType<typeof setTimeout>, () => void>()
   const running = new Set<Promise<void>>()
 
-  async function run(context: MemoryIdentityContext): Promise<void> {
+  async function run(context: MemoryIdentityContext, signal: AbortSignal): Promise<void> {
     // A transient identity has no repo until it is promoted.
     if (!existsSync(context.identityPaths.repo)) return
     const record = await createLockRecord("memory-maintenance", { runId: `maintenance-${process.pid}` })
     try {
       await withLock(memoryMaintenanceLockPath(context.identityPaths.locks), record, async () => {
-        abort.signal.throwIfAborted()
+        signal.throwIfAborted()
         const repo = createRepo(context)
         const last = Number(await repo.configGet(STAMP_KEY) ?? Number.NaN)
         if (Number.isFinite(last) && now() - last < intervalMs) return
         await repo.configSet(STAMP_KEY, String(now()))
-        const result = await repo.maintain({ minLooseObjects, timeoutMs, signal: abort.signal })
+        const result = await repo.maintain({ minLooseObjects, timeoutMs, signal })
         if (result.status === "packed") {
           options.logger?.info("omo-senpi memory repo packed", {
             identity: context.identity,
@@ -100,7 +104,7 @@ export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}):
 
   return {
     schedule(context): void {
-      if (abort.signal.aborted || scheduled.has(context.identity)) return
+      if (scheduled.has(context.identity)) return
       scheduled.add(context.identity)
       let finish = (): void => {}
       const pass = new Promise<void>((resolve) => {
@@ -109,8 +113,9 @@ export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}):
       running.add(pass)
       const timer = setTimeout(() => {
         timers.delete(timer)
-        void run(context).catch((error: unknown) => {
-          if (abort.signal.aborted) return
+        const signal = abort.signal
+        void run(context, signal).catch((error: unknown) => {
+          if (signal.aborted) return
           options.logger?.warn("omo-senpi memory repo maintenance failed", {
             identity: context.identity,
             error: error instanceof Error ? error.message : String(error),
@@ -123,11 +128,13 @@ export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}):
     },
     dispose(): void {
       abort.abort()
+      abort = new AbortController()
       for (const [timer, finish] of timers) {
         clearTimeout(timer)
         finish()
       }
       timers.clear()
+      scheduled.clear()
     },
     async settled(): Promise<void> {
       await Promise.all([...running])

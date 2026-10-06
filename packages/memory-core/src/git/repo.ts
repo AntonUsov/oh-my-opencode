@@ -8,6 +8,7 @@ import { describeDirtyMarkdownEncodingIssues } from "./porcelain"
 import { GitPathStateStore } from "./path-state"
 import { authorFlags, commandError, normalizePathspecs, normalizeSeedPath } from "./repo-arguments"
 import { parseLogOutput, parseNulPaths } from "./repo-log"
+import { runMemoryRepoMaintenance } from "./repo-maintenance"
 import { parseCatFileBatch, parseLsTreeBlobs, parseLsTreeSized } from "./repo-tree"
 import { assertNoUnrelatedChanges } from "./repo-status"
 import { withSerializedGitWorktreeMutation } from "./worktree-mutation-queue"
@@ -195,29 +196,9 @@ export class GitMemoryRepo {
     })))
   }
 
-  /**
-   * Packs loose objects. Commits never run `gc --auto` (`gc.auto=0`, so a commit is never held up by a
-   * repack), so without this a long-lived repo collects tens of thousands of loose objects and every
-   * history walk slows down. git's `loose-objects` task writes them into a new pack (it deletes loose
-   * copies only of objects that were already packed before it ran), then `prune-packed` deletes the
-   * loose copies of everything now in a pack. Both only ever remove an object that a pack also holds,
-   * so they are safe while other processes keep committing; git's maintenance lock keeps two
-   * `maintenance run`s from overlapping. (`incremental-repack` is left out: it needs a multi-pack-index
-   * and fails on a repo that never had one.)
-   */
-  async maintain(options: GitMaintenanceOptions): Promise<GitMaintenanceResult> {
-    const looseObjectsBefore = await this.countLooseObjects()
-    if (looseObjectsBefore < options.minLooseObjects) return { status: "skipped", looseObjects: looseObjectsBefore }
-    await this.git(["maintenance", "run", "--task=loose-objects", "--quiet"], options.timeoutMs, options.signal)
-    options.signal?.throwIfAborted()
-    await this.git(["prune-packed", "--quiet"], options.timeoutMs, options.signal)
-    return { status: "packed", looseObjectsBefore, looseObjectsAfter: await this.countLooseObjects() }
-  }
-
-  private async countLooseObjects(): Promise<number> {
-    const { stdout } = await this.git(["count-objects", "-v"])
-    const count = /^count: (\d+)$/m.exec(stdout)?.[1]
-    return count === undefined ? 0 : Number(count)
+  /** Packs loose objects off the hot path; see `runMemoryRepoMaintenance`. */
+  maintain(options: GitMaintenanceOptions): Promise<GitMaintenanceResult> {
+    return runMemoryRepoMaintenance((argv, timeoutMs, signal) => this.git(argv, timeoutMs, signal), options)
   }
 
   async worktreeAdd(path: string, branch: string, startPoint = "HEAD"): Promise<void> {
