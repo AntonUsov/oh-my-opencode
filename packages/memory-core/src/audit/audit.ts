@@ -29,6 +29,8 @@ export interface MemoryAuditOptions {
 }
 
 const HOMES = new Set(["system", "reference", "notes", "people", "skills"])
+/** The legacy layout nests the same homes under `memory/`, as `isMemoryContentPath` and the hook accept. */
+const LEGACY_PREFIX = "memory/"
 const ROOT_FILES = new Set(["ARCHIVE.md", "README.md"])
 
 /** Read the working corpus, including a maintenance worktree, without following symlinks. */
@@ -42,7 +44,8 @@ export async function auditMemoryRepo(
   const bodies = new Map<string, string[]>()
 
   for (const path of files.filter((file) => file.endsWith(".md"))) {
-    if (!HOMES.has(path.split("/")[0] ?? "") && !ROOT_FILES.has(path)) {
+    const homePath = path.startsWith(LEGACY_PREFIX) ? path.slice(LEGACY_PREFIX.length) : path
+    if (!HOMES.has(homePath.split("/")[0] ?? "") && !ROOT_FILES.has(path)) {
       issues.push({ code: "path_orphan", path, detail: "outside memory homes" })
     }
     let content: string
@@ -59,10 +62,12 @@ export async function auditMemoryRepo(
       if (violation !== null) issues.push({ code: "frontmatter_invalid", path, detail: violation })
     }
     const body = FRONTMATTER_RE.exec(content)?.[2] ?? content
-    const hash = createHash("sha256").update(body).digest("hex")
-    const group = bodies.get(hash)
-    if (group) group.push(path)
-    else bodies.set(hash, [path])
+    if (body.trim() !== "") {
+      const hash = createHash("sha256").update(body).digest("hex")
+      const group = bodies.get(hash)
+      if (group) group.push(path)
+      else bodies.set(hash, [path])
+    }
     issues.push(...danglingLinks(path, body, existing))
   }
 
@@ -108,14 +113,27 @@ function danglingLinks(path: string, body: string, existing: ReadonlySet<string>
     ...[...text.matchAll(/(?<!!)\[[^\]\n]*\]\((<?[^)\n]+>?)\)/g)].map((match) => ({ raw: match[1] ?? "", wiki: false })),
   ]
   for (const { raw, wiki } of targets) {
-    const target = (wiki ? raw.split("|")[0] ?? "" : raw.replace(/^<|>$/g, "")).split("#")[0]?.trim() ?? ""
+    const target = (wiki ? raw.split("|")[0] ?? "" : markdownDestination(raw)).split("#")[0]?.trim() ?? ""
     if (!target || /^(?:https?:|mailto:)/i.test(target)) continue
     const resolved = posix.normalize(wiki ? target : posix.join(posix.dirname(path), target))
     const escapes = posix.isAbsolute(target) || resolved === ".." || resolved.startsWith("../")
-    if (!escapes && (existing.has(resolved) || (wiki && existing.has(`${resolved}.md`)))) continue
+    if (!escapes && (existing.has(resolved) || (wiki && existing.has(`${resolved}.md`)) || isDirectory(resolved, existing))) continue
     issues.push({ code: "link_dangling", path, detail: escapes ? `${target} (escapes repository)` : target })
   }
   return issues
+}
+
+/** The destination of a markdown link: `<a b.md>` keeps its spaces, otherwise a space ends it (a title follows). */
+function markdownDestination(raw: string): string {
+  const trimmed = raw.trim()
+  if (trimmed.startsWith("<")) return trimmed.slice(1, trimmed.indexOf(">") === -1 ? undefined : trimmed.indexOf(">"))
+  return trimmed.split(/\s+/)[0] ?? ""
+}
+
+function isDirectory(resolved: string, existing: ReadonlySet<string>): boolean {
+  const prefix = resolved.endsWith("/") ? resolved : `${resolved}/`
+  for (const file of existing) if (file.startsWith(prefix)) return true
+  return false
 }
 
 function withoutFences(body: string): string {
@@ -130,6 +148,7 @@ function withoutFences(body: string): string {
       fence = { char: marker[1][0] ?? "", length: marker[1].length }
       return ""
     }
-    return line
+    // inline code spans quote link syntax as an example, not a reference
+    return line.replace(/(`+)[^`]*?\1/g, "")
   }).join("\n")
 }

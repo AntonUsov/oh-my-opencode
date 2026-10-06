@@ -101,6 +101,30 @@ test("#given symlinked files and excluded directories #when audited #then they a
   expect((await auditMemoryRepo(dir)).issues).toEqual([])
 })
 
+test("#given links that do resolve in markdown syntax variants #when audited #then none is reported dangling", async () => {
+  // a link title, a link to a directory, and link syntax quoted in inline code all point nowhere wrong
+  const { dir } = await repoWith([
+    { relativePath: "reference/a.md", content: memory("A", "[t](exists.md \"Title\") [dir](../people/) see `[[reference/missing.md]]` and `[x](gone.md)`") },
+    { relativePath: "reference/exists.md", content: memory("Exists", "Target") },
+    { relativePath: "people/sam/card.md", content: memory("Sam", "Card") },
+  ])
+  expect((await auditMemoryRepo(dir)).issues).toEqual([])
+})
+
+test("#given files whose bodies are empty #when audited #then they are not reported as duplicates", async () => {
+  const { dir } = await repoWith([
+    { relativePath: "reference/a.md", content: "---\ndescription: A\n---\n" },
+    { relativePath: "reference/b.md", content: "---\ndescription: B\n---\n" },
+  ])
+  expect((await auditMemoryRepo(dir)).counts.content_duplicate).toBe(0)
+})
+
+test("#given the legacy memory/ layout #when audited #then its homes are not orphans", async () => {
+  // isMemoryContentPath and the pre-commit hook accept an optional memory/ prefix on every home
+  const { dir } = await repoWith([{ relativePath: "memory/reference/a.md", content: memory("A", "Legacy layout") }])
+  expect((await auditMemoryRepo(dir)).counts.path_orphan).toBe(0)
+})
+
 test("#given escaping markdown target #when audited #then confinement failure is explicit", async () => {
   const { dir } = await repoWith([{ relativePath: "reference/a.md", content: memory("A", "[outside](../../outside.md)") }])
   expect((await auditMemoryRepo(dir)).issues).toEqual([
