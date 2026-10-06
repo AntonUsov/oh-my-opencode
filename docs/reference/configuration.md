@@ -749,6 +749,11 @@ before its run started is recorded as `abandoned` with reason
 `launch_interrupted`; its worktree is already removed, so `abandoned-runs` does
 not list it.
 
+`OMO_MEMORY_KILL_POINT` is a test-only seam: when it names a recovery point
+(`after-reserve`, `after-prelaunch`, `after-worktree`, `after-child-exit`,
+`after-validate`, `after-merge`, `before-receipt`), the process that reaches
+it kills itself. Never set it outside a crash test.
+
 The structural audit uses these stable codes:
 
 | Code | Meaning |

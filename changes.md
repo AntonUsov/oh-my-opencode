@@ -1,3 +1,19 @@
+## 2026-10-07 - Memory maintenance runs write receipts, unrecoverable runs are quarantined, and recovery is kill-tested (#9689)
+
+Reflection, dream and facts runs now leave an append-only record of what they did:
+`receipts.jsonl` in the identity's runtime directory, one JSON line per event (`launched`,
+`recovered`, `merged`, `no_changes`, `failed`, `abandoned`, `quarantined`, and for facts
+`committed`, `no_facts`, `failed`, `parked`). A receipt is written after the run's own
+terminal file, and the next startup rebuilds a lost one from that file, so each outcome is
+recorded exactly once. Startup reconciliation no longer throws on invalid timestamps or keeps a
+reservation forever behind an unreadable ledger. Under a launcher proven dead, such a run is
+quarantined: its files stay, `quarantined.json` names the reason, and the reservation is
+released so later runs proceed. A supervisor that dies after its child committed a valid result
+no longer loses it: startup validates and merges the tip. A launch interrupted before its run
+started is recorded as `abandoned` instead of being deleted. `/doctor` shows the newest
+receipt per kind and lists quarantined runs. A crash test kills a real process at each of seven
+points and checks that recovery settles every run once with its evidence intact.
+
 ## 2026-10-06 - /doctor audits corpus structure and dream repairs it (#9652)
 
 Memory doctor now reports dangling links, invalid frontmatter, duplicate bodies,
