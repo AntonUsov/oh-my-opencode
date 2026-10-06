@@ -71,7 +71,7 @@ describe("renderExternalProjection limits", () => {
     expect(text).toMatch(/^zz\/: entry-29\.md, .* \(\+\d+ more; read \$MEMORY_DIR\/zz\/ to list\)$/m)
   })
 
-  it("#given a budget one byte below the next larger listing #when fitted #then the largest listing that fits is kept, line breaks counted", () => {
+  it("#given a budget one byte below the next larger listing #when fitted #then shrinking stops at the first listing that fits, line breaks counted", () => {
     // given
     const wide = Array.from({ length: 30 }, (_, index) => `zz/entry-${String(index).padStart(2, "0")}.md`)
     const paths = ["aa/x1.md", "aa/x2.md", ...wide]
@@ -100,6 +100,30 @@ describe("renderExternalProjection limits", () => {
     // then
     expect(bytes(text)).toBeLessThanOrEqual(bytes(full))
     expect(renderExternalProjectionStats(paths, { times: at({}), limits })).toMatchObject({ overflow: true, bytes: bytes(text) })
+  })
+
+  it("#given a listing that fits only with one directory full and another emptied #when widest-first shrinking misses it #then that listing is found and no overflow is reported", () => {
+    // given
+    const long = "a-name-long-enough-to-outweigh-its-omitted-names-marker"
+    const paths = [
+      ...["a", "b", "c", "d", "e", "f"].map((name) => `A/${name}.md`),
+      `B/${long}-1.md`, `B/${long}-2.md`,
+    ]
+    const smallest = [
+      "<external_projection>",
+      "$MEMORY_DIR/",
+      "A/: a.md, b.md, c.md, d.md, e.md, f.md",
+      "B/: (+2 more; read $MEMORY_DIR/B/ to list)",
+      "</external_projection>",
+    ].join("\n")
+
+    // when
+    const limits = { maxEntriesPerDirectory: 0, maxBytes: bytes(smallest) }
+    const text = renderExternalProjection(paths, { times: at({}), limits })
+
+    // then
+    expect(text).toBe(smallest)
+    expect(renderExternalProjectionStats(paths, { times: at({}), limits }).overflow).toBe(false)
   })
 
   it("#given a budget equal to the exact size of the full render #when fitted #then nothing is omitted", () => {

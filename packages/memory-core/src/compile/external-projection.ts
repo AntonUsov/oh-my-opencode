@@ -108,9 +108,8 @@ function layout(paths: readonly string[], input: ExternalProjectionInput | undef
  * (every allowance zero) is over budget, the caller reports the overflow.
  */
 function fitToBudget(directories: readonly DirectoryListing[], allowances: number[], maxBytes: number, rootBare: boolean): void {
-  const lineBytes = (index: number): number => {
+  const lineBytes = (index: number, allowance = allowances[index] ?? 0): number => {
     const directory = directories[index]
-    const allowance = allowances[index] ?? 0
     if (directory === undefined) return 0
     let size = Buffer.byteLength(`${directory.label}: `)
     for (let shown = 0; shown < allowance; shown++) size += (directory.nameBytes[shown] ?? 0) + (shown > 0 ? 2 : 0)
@@ -118,11 +117,11 @@ function fitToBudget(directories: readonly DirectoryListing[], allowances: numbe
     if (omitted > 0) size += (allowance > 0 ? 1 : 0) + Buffer.byteLength(marker(omitted, directory.pointer))
     return size
   }
+  const start = [...allowances]
   const lines = directories.map((_, index) => lineBytes(index))
   const fixedLines = 2 + (rootBare ? 1 : 0)
   const fixedBytes = Buffer.byteLength(OPEN) + Buffer.byteLength(CLOSE) + (rootBare ? Buffer.byteLength(`${MEMORY_DIR}/`) : 0)
   let total = fixedBytes + lines.reduce((sum, size) => sum + size, 0) + (fixedLines + directories.length - 1)
-  let smallest = { total, allowances: [...allowances] }
   while (total > maxBytes) {
     let widest = -1
     for (let index = 0; index < allowances.length; index++) {
@@ -133,11 +132,18 @@ function fitToBudget(directories: readonly DirectoryListing[], allowances: numbe
     const before = lines[widest] ?? 0
     lines[widest] = lineBytes(widest)
     total += (lines[widest] ?? 0) - before
-    if (total < smallest.total) smallest = { total, allowances: [...allowances] }
   }
-  // An omitted-names marker can cost more than the names it replaces; when nothing fits, the
-  // smallest layout seen is emitted so a cap never renders more than no cap would.
-  if (total > maxBytes) smallest.allowances.forEach((allowance, index) => { allowances[index] = allowance })
+  if (total <= maxBytes) return
+  // An omitted-names marker can cost more than the names it replaces, so widest-first shrinking can
+  // miss the smallest listing. Lines are independent: each directory at its own smallest line is the
+  // true minimum, which may still fit; ties keep more names.
+  start.forEach((limit, index) => {
+    let best = limit
+    for (let allowance = limit - 1; allowance >= 0; allowance--) {
+      if (lineBytes(index, allowance) < lineBytes(index, best)) best = allowance
+    }
+    allowances[index] = best
+  })
 }
 
 function render({ rootBare, directories, allowances }: Layout): string {
