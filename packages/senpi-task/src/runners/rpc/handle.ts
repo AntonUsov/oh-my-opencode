@@ -81,7 +81,6 @@ export function createRpcChildHandle(options: CreateRpcChildHandleOptions): Trac
   const listeners = createHandleListeners({
     onListenerError: (error) => log("senpi-task rpc child event listener failed", { taskId, error: String(error) }),
   })
-  client.onEvent((event) => listeners.emitEvent(event))
   client.onEvent((event) => {
     // A run the child starts on its own after its turn settled (a monitor or background job woke it)
     // is a new turn: the next outcome is that run's, never the settled one again (omo#9069).
@@ -98,6 +97,9 @@ export function createRpcChildHandle(options: CreateRpcChildHandleOptions): Trac
     }
     settlement.observe(event)
   })
+  // Subscribers run after the handle has recorded the event (as on dev, and as the host handle does), so a
+  // live observer reads current state and one that throws cannot keep the handle from settling a turn.
+  client.onEvent((event) => listeners.emitEvent(event))
 
   const heartbeat = setInterval(() => {
     if (client.exited || child.stdin?.writableEnded || child.stdin?.destroyed) return

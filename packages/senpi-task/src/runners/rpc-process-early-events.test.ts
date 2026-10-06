@@ -83,4 +83,20 @@ describe("events a process child emits before the manager subscribes", () => {
     expect(late).toContain("queue_update")
     expect(first.filter((type) => type === "agent_start")).toHaveLength(1)
   })
+
+  test("#given a live subscriber #when the child's message_end arrives #then the handle has already recorded it, as on dev (subscribers run after the handle)", async () => {
+    // given
+    const handle = await runner().start(spec("st_e3", "hold"))
+    const atMessageEnd = new Promise<string | undefined>((resolve) => {
+      handle.subscribe((event) => {
+        if (event.type === "message_end") resolve(handle.lastAssistantText())
+      })
+    })
+
+    // when
+    await handle.steer("complete")
+
+    // then
+    expect(await atMessageEnd).toBe("steered-complete")
+  })
 })
