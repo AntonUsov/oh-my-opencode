@@ -51,6 +51,7 @@ async function launchDream(
   await repo.init({ seedFiles: [
     { relativePath: "system/base.md", content: "---\ndescription: Base\n---\nBase.\n" },
     ...(options.auditFixture ? [
+      { relativePath: ".gitattributes", content: "*.md text eol=lf\n" },
       { relativePath: "system/boundaries.md", content: "---\ndescription: Boundaries\nread_only: true\n---\nExact user instruction.\n" },
       { relativePath: "reference/a.md", content: "---\ndescription: Link\n---\n[[reference/moved.md]]\n" },
       { relativePath: "reference/moved-here.md", content: "---\ndescription: Moved content\n---\nMoved content.\n" },
@@ -132,12 +133,13 @@ describe("dream worker dispatch", () => {
     const item = await launchDream({ enabled: false, max_entries: 40, max_entry_chars: 200 }, { auditFixture: true })
     expect(item.result.outcome).toBe("merged")
     const repo = item.identity.paths.repo
+    const gitRepo = new GitMemoryRepo({ dir: repo, agentId: item.identity.id })
     expect(await readFile(join(repo, "reference/a.md"), "utf8")).toContain("[[reference/moved-here.md]]")
     expect(await readFile(join(repo, "reference/dup1.md"), "utf8")).toContain("Shared content.")
     expect(await readFile(join(repo, "reference/dup2.md"), "utf8")).toContain("[[reference/dup1.md]]")
     expect(existsSync(join(repo, "scratch/stray.md"))).toBe(false)
-    expect(await readFile(join(repo, "reference/stray.md"), "utf8")).toBe("---\ndescription: Stray\n---\nStray content.\n")
-    expect(await readFile(join(repo, "system/boundaries.md"), "utf8")).toBe("---\ndescription: Boundaries\nread_only: true\n---\nExact user instruction.\n")
+    expect(await gitRepo.show("HEAD", "reference/stray.md")).toBe(await gitRepo.show(item.baseSha, "scratch/stray.md"))
+    expect(await gitRepo.show("HEAD", "system/boundaries.md")).toBe(await gitRepo.show(item.baseSha, "system/boundaries.md"))
     expect(Object.values((await auditMemoryRepo(repo)).counts).every((count) => count === 0)).toBe(true)
     const report = await readFile(join(item.spawn.paths.sessionDir, "child-stdout.log"), "utf8")
     expect(report).toContain("fixed link_dangling 1, content_duplicate 1, path_orphan 1 / left none")
