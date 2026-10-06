@@ -90,6 +90,13 @@ export function registerMemoryStatic(input: {
     onRepin: (sessionId, reason) => options.logger?.info("omo-senpi memory projection repinned", { sessionId, reason }),
     resolveCompileWarnTokens: () => loadCommandSettings().settings.compile_warn_tokens,
     resolveNudgeTurns: (repo, sessionId, identity) => nudgeWiring.nudgeTurns(repo, sessionId, identity),
+    onNoticeInputFailed: (notice, sessionId, error) => {
+      options.logger?.warn("omo-senpi memory notice input failed; this turn has no such notice", {
+        notice,
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    },
     resolveSoulNotice: async (repo, sessionId, identity) => {
       const context = resolveContext(sessionId)
       if (context === undefined || context.identity !== identity) return undefined
