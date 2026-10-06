@@ -428,9 +428,9 @@ function directiveForModel(modelId: string | undefined): string {
 }
 
 function selectDirectiveText(text: string, directive: string): string | undefined {
-  // Native skill expansion retains these source markers; generated directives
+  // Native skill expansion retains the variant markers; generated directives
   // omit them. Match only the canonical full body, preserving arbitrary prose.
-  const unmarked = text.replace(/<!-- omo-ultrawork-verification:(?:start|end) -->\r?\n/g, "")
+  const unmarked = text.replace(/<!-- omo-ultrawork-astra:[a-z0-9-]+:(?:start|end) -->\r?\n/g, "")
   const selected = directive.trimEnd()
   let result = unmarked
   let matched = false
