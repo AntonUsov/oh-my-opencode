@@ -300,6 +300,7 @@ var REQUIRED_PLUGIN_ARTIFACTS = [
   join4("skills", "ast-grep", "SKILL.md"),
   join4("skills", "browser", "SKILL.md"),
   join4("skills", "browser", "runtime", "omowright", "index.js"),
+  join4("skills", "browser", "runtime", "omowright", "page-bundle.js"),
   join4("skills", "coding-agent-sessions", "SKILL.md"),
   join4("skills", "debugging", "SKILL.md"),
   join4("skills", "frontend", "SKILL.md"),

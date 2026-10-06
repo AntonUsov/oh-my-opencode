@@ -49,6 +49,7 @@ export async function createPluginFixture(options: { readonly runtime?: boolean 
   // The browser skill's bundled omowright runtime is a required payload artifact (issue #9661);
   // the fixture mirrors the required set so the installer's integrity check passes.
   await writeFixtureFile(join(pluginPath, "skills", "browser", "runtime", "omowright", "index.js"), "export {}\n")
+  await writeFixtureFile(join(pluginPath, "skills", "browser", "runtime", "omowright", "page-bundle.js"), "\n")
   // Credential-gated skill: staged outside pi.skills but still a required payload artifact.
   await writeFixtureFile(join(pluginPath, "skills-conditional", "x-search", "SKILL.md"), "# x-search\n")
   await writeFixtureFile(join(pluginPath, "scripts", "install.mjs"), "#!/usr/bin/env node\n")

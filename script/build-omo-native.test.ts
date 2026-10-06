@@ -3,7 +3,9 @@
 // 33586966744 hit ENOENT on packages/lsp-daemon/dist in every platform leg.
 
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { dirname, join, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -11,6 +13,7 @@ import { PERSONA_ASSET_FILES } from "@oh-my-opencode/memory-core/personas"
 
 import {
   ensurePrebuiltNativeInputs,
+  NATIVE_REQUIRED_ARTIFACTS,
   PAYLOAD_DIRECTORIES,
   PAYLOAD_FILES,
   PAYLOAD_SCRIPT,
@@ -173,5 +176,57 @@ describe("plugin payload allowlist parity", () => {
   // fails to load omowright.
   test("#given the browser skill omowright runtime #when checking the payload #then it is required", () => {
     expect(REQUIRED_PLUGIN_ARTIFACTS).toContain(join("skills", "browser", "runtime", "omowright", "index.js"))
+    expect(REQUIRED_PLUGIN_ARTIFACTS).toContain(join("skills", "browser", "runtime", "omowright", "page-bundle.js"))
+  })
+})
+
+describe("payload completeness gate", () => {
+  const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "build-omo-native.ts")
+  const pageBundle = join("skills", "browser", "runtime", "omowright", "page-bundle.js")
+
+  function stagedPayload(): string {
+    const root = mkdtempSync(join(tmpdir(), "omo-native-gate-"))
+    for (const artifact of NATIVE_REQUIRED_ARTIFACTS) {
+      mkdirSync(dirname(join(root, artifact)), { recursive: true })
+      writeFileSync(join(root, artifact), "staged\n")
+    }
+    return root
+  }
+
+  function checkOnly(outputDir: string) {
+    return spawnSync("bun", [scriptPath, "--check-only", "--output", outputDir], { encoding: "utf8" })
+  }
+
+  // Regression (issue #9661): the bundled omowright index.js reads page-bundle.js beside itself at
+  // import time, so a payload that carries index.js without it ships the same broken browser skill.
+  test("#given a staged payload missing only the omowright page bundle #when the completeness gate runs #then it fails naming that file", () => {
+    // given
+    const root = stagedPayload()
+    try {
+      rmSync(join(root, pageBundle))
+
+      // when
+      const result = checkOnly(root)
+
+      // then
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain(`missing required artifact: ${pageBundle}`)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test("#given a complete staged payload #when the completeness gate runs #then it passes", () => {
+    // given
+    const root = stagedPayload()
+    try {
+      // when
+      const result = checkOnly(root)
+
+      // then
+      expect(result.status).toBe(0)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

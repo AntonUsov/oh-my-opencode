@@ -117,6 +117,7 @@ describe("Senpi compatibility test script", () => {
       // the packed layout mirrors it so the installer's integrity check passes.
       await mkdir(join(pluginRoot, "skills", "browser", "runtime", "omowright"), { recursive: true })
       await writeFile(join(pluginRoot, "skills", "browser", "runtime", "omowright", "index.js"), "export {}\n")
+      await writeFile(join(pluginRoot, "skills", "browser", "runtime", "omowright", "page-bundle.js"), "\n")
       // Credential-gated skill: staged outside pi.skills but still a required payload artifact.
       await mkdir(join(pluginRoot, "skills-conditional", "x-search"), { recursive: true })
       await writeFile(join(pluginRoot, "skills-conditional", "x-search", "SKILL.md"), "# x-search\n")

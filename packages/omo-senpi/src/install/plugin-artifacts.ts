@@ -25,6 +25,9 @@ export const REQUIRED_PLUGIN_ARTIFACTS: readonly string[] = [
   // build:materialize-frontend and gitignored, so it must be required explicitly or a payload
   // without it ships a browser skill whose loadOmowright() always fails.
   join("skills", "browser", "runtime", "omowright", "index.js"),
+  // index.js reads page-bundle.js from beside itself when it is imported, so a payload with only
+  // index.js fails the same way (#9661).
+  join("skills", "browser", "runtime", "omowright", "page-bundle.js"),
   join("skills", "coding-agent-sessions", "SKILL.md"),
   join("skills", "debugging", "SKILL.md"),
   join("skills", "frontend", "SKILL.md"),
