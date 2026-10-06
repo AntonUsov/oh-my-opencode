@@ -45,7 +45,7 @@ export const SECRET_PATTERN_SOURCES: ReadonlyArray<readonly [SecretPatternClass,
   ],
   ["authorization_header", `\\bAuthorization\\s*:\\s*Bearer\\s+${SECRET_VALUE_TAIL}{1,256}`, "i"],
   ["openai_key", "\\bsk-(?:proj-)?[-_A-Za-z0-9]+\\b", ""],
-  ["vendor_token", "\\b(?:ghp|github_pat|glpat|xox[baprs])-[-_A-Za-z0-9]+\\b", ""],
+  ["vendor_token", "\\b(?:ghp|github_pat|glpat|xox[baprs])[-_][-_A-Za-z0-9]+\\b", ""],
 ]
 
 /**
