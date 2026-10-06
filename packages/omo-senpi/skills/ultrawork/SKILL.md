@@ -359,6 +359,7 @@ Until every success criterion PASSES with its evidence captured:
 6. Verify: LSP diagnostics clean on changed files; no test skipped or
    xfail-ed this turn.
 7. Mark completed. Append non-obvious findings / learnings.
+<!-- omo-ultrawork-verification:start -->
 8. Evidence stays valid per target until an input changes; record with
    each artifact the commit and what it exercised. After each increment
    rerun what moved — the tests of every touched file and of the files
@@ -367,6 +368,7 @@ Until every success criterion PASSES with its evidence captured:
    rest. The full set (scenarios, suite, typecheck, build) runs once
    more right before the final message. Record PASS/FAIL beside each
    artifact. Loop until all PASS.
+<!-- omo-ultrawork-verification:end -->
 
 Within a step, follow Finding things; READ before CHANGE, never in
 parallel with it.

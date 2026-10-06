@@ -8,7 +8,10 @@ const scriptDir = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(scriptDir, "../..")
 const repoRoot = resolve(packageRoot, "../..")
 const sourcePath = resolve(repoRoot, "packages/omo-senpi/skills/ultrawork/SKILL.md")
+const astraVerificationPath = resolve(packageRoot, "skills/ultrawork/references/astra-verification.md")
 const targetPath = resolve(packageRoot, "src/components/ultrawork/generated-directive.ts")
+const verificationStart = "<!-- omo-ultrawork-verification:start -->\n"
+const verificationEnd = "<!-- omo-ultrawork-verification:end -->\n"
 
 // The directive is authored senpi-native (skills/ultrawork/SKILL.md) and senpi HAS
 // goal/todo/task/team tools, so the source speaks them directly. These tokens name
@@ -42,8 +45,17 @@ function extractSkillBody(rawSkill) {
   return frontmatter === null ? normalized : normalized.slice(frontmatter[0].length)
 }
 
-export function transformDirective(rawSkill) {
-  const body = extractSkillBody(rawSkill)
+export function transformDirective(rawSkill, astraVerification) {
+  let body = extractSkillBody(rawSkill)
+  const start = body.indexOf(verificationStart)
+  const end = body.indexOf(verificationEnd)
+  if (start < 0 || end < start || body.indexOf(verificationStart, start + 1) >= 0 || body.indexOf(verificationEnd, end + 1) >= 0) {
+    throw new Error("senpi ultrawork directive requires one ordered verification marker pair")
+  }
+  const verification = astraVerification === undefined
+    ? body.slice(start + verificationStart.length, end)
+    : `${normalizeNewlines(astraVerification).trim()}\n`
+  body = body.slice(0, start) + verification + body.slice(end + verificationEnd.length)
   const violations = []
   for (const block of splitBlocks(body)) {
     for (const pattern of forbiddenPatterns) {
@@ -59,7 +71,7 @@ export function transformDirective(rawSkill) {
   return `${body.trim()}\n`
 }
 
-function renderGeneratedModule(directive) {
+function renderGeneratedModule(directive, astraDirective) {
   return [
     "export const FORBIDDEN_DIRECTIVE_TOKENS = [",
     ...forbiddenDirectiveTokens.map((token) => `  ${JSON.stringify(token)},`),
@@ -67,11 +79,17 @@ function renderGeneratedModule(directive) {
     "",
     `export const SENPI_ULTRAWORK_DIRECTIVE = ${JSON.stringify(directive)} as const`,
     "",
+    `export const SENPI_ASTRA_ULTRAWORK_DIRECTIVE = ${JSON.stringify(astraDirective)} as const`,
+    "",
   ].join("\n")
 }
 
 function readExpectedModule() {
-  return renderGeneratedModule(transformDirective(readFileSync(sourcePath, "utf8")))
+  const source = readFileSync(sourcePath, "utf8")
+  return renderGeneratedModule(
+    transformDirective(source),
+    transformDirective(source, readFileSync(astraVerificationPath, "utf8")),
+  )
 }
 
 function main(argv) {
