@@ -128,7 +128,7 @@ async function launchDream(
 }
 
 describe("dream worker dispatch", () => {
-  test("audit input drives structural repairs through completion validation and merge", async () => {
+  test("#given three structural defects #when dream receives the audit #then repairs validate and merge", async () => {
     const item = await launchDream({ enabled: false, max_entries: 40, max_entry_chars: 200 }, { auditFixture: true })
     expect(item.result.outcome).toBe("merged")
     const repo = item.identity.paths.repo

@@ -37,7 +37,7 @@ async function payload(dream: boolean) {
   }
 }
 
-test("audit dream payload uses the worktree and redacts legacy secrets", async () => {
+test("#given a worktree-only legacy target #when dream starts #then its audit is redacted", async () => {
   const { prepared, parentRepo } = await payload(true)
   const path = prepared.env.AUDIT_PATH
   if (!path) throw new Error("dream audit input missing")
@@ -50,7 +50,7 @@ test("audit dream payload uses the worktree and redacts legacy secrets", async (
   expect(existsSync(join(parentRepo, "reference/only-worktree.md"))).toBe(false)
 })
 
-test("audit input is absent from reflection runs", async () => {
+test("#given a reflection run #when it starts #then audit input is absent", async () => {
   const { prepared } = await payload(false)
   expect(prepared.env.AUDIT_PATH).toBeUndefined()
   expect(existsSync(join(prepared.paths.sessionDir, "audit.json"))).toBe(false)

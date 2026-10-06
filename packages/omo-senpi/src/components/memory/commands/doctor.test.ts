@@ -75,7 +75,7 @@ Changes to these files only take effect after a git commit. Use the memory tools
 const V1_PERSONA_SEED = `---\ndescription: Persona - who I am\n---\n${V1_PERSONA_BODY}`
 
 describe("/doctor", () => {
-  test("audit warns about a dangling target", async () => {
+  test("#given a dangling target #when doctor runs #then audit warns", async () => {
     const { identity, pi, ctx } = await harness()
     await mkdir(join(identity.identityPaths.repo, "reference"))
     await writeFile(join(identity.identityPaths.repo, "reference/a.md"), "---\ndescription: Link\n---\n[[reference/missing.md]]\n")
@@ -84,14 +84,14 @@ describe("/doctor", () => {
     expect(ctx.ui.notifications.at(-1)?.level).toBe("warning")
   })
 
-  test("audit reports a clean corpus once", async () => {
+  test("#given a clean corpus #when doctor runs #then audit reports success once", async () => {
     const { pi, ctx } = await harness()
     const text = await invoke(pi, "doctor", "", ctx)
     expect(text.match(/\[ok\] audit:/g)).toHaveLength(1)
     expect(ctx.ui.notifications.at(-1)?.level).toBe("info")
   })
 
-  test("audit JSON is parseable and is delivered unchanged", async () => {
+  test("#given a clean corpus #when JSON is requested #then the audit notification is parseable and unchanged", async () => {
     const { pi, ctx, identity } = await harness()
     const text = await invoke(pi, "doctor", "--json", ctx)
     const report = JSON.parse(text)
@@ -102,7 +102,7 @@ describe("/doctor", () => {
     expect(ctx.ui.notifications.at(-1)?.message).toBe(text)
   })
 
-  test("audit JSON redacts legacy secrets without corrupting counts", async () => {
+  test("#given legacy secrets #when JSON is requested #then audit redaction preserves counts", async () => {
     const { identity, pi, ctx } = await harness()
     await mkdir(join(identity.identityPaths.repo, "reference"))
     await writeFile(join(identity.identityPaths.repo, "reference/a.md"), "---\ndescription: Legacy link\n---\n[[notes/token=abc123456.md]]\n")
@@ -118,7 +118,7 @@ describe("/doctor", () => {
     expect(text).not.toContain("AKIAABCDEFGHIJKLMNOP")
   })
 
-  test("audit frontmatter failure keeps the existing single check", async () => {
+  test("#given invalid frontmatter #when JSON is requested #then audit keeps the existing single failure check", async () => {
     const { identity, pi, ctx } = await harness()
     await writeFile(join(identity.identityPaths.repo, "system/bad.md"), "missing description")
     const text = await invoke(pi, "doctor", "--json", ctx)
@@ -130,7 +130,7 @@ describe("/doctor", () => {
     expect(ctx.ui.notifications.at(-1)?.level).toBe("error")
   })
 
-  test("audit refuses an unknown repair flag", async () => {
+  test("#given an unknown repair flag #when doctor runs #then audit refuses it", async () => {
     const { pi, ctx } = await harness()
     const text = await invoke(pi, "doctor", "--json --fix", ctx)
     expect(text).toContain("unknown flag --fix")
