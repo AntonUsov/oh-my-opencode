@@ -68,8 +68,8 @@ function createSandbox(binary) {
     ] } },
   }))
   writeFileSync(join(sandbox.cwd, "fixture.txt"), `${sandbox.marker}\n`)
-  // Sandbox cells on. Every cell gets 10 s before it detaches (room for a cold QuickJS boot on a slow runner); the
-  // large sandbox cell holds for 20 s, so it detaches while its item is already visible and settles well after.
+  // Sandbox cells on. Every cell gets 10 s before it detaches (room for a cold QuickJS boot on a slow runner). The
+  // large sandbox cell blocks until a later cell releases it, so its detach and the peek after it never race its end.
   mkdirSync(join(sandbox.cwd, ".senpi"), { recursive: true })
   writeFileSync(join(sandbox.cwd, ".senpi", "codemode.json"), JSON.stringify({
     sandbox: { enabled: true }, cellTimeoutSeconds: 10, foregroundWindowSeconds: 12,
@@ -258,10 +258,10 @@ async function main() {
     if (/Cannot find|ENOENT|missing.*asset|Failed to load extension/i.test(result.stderr)) {
       throw new Error(`missing packaged asset: ${result.stderr.slice(-4000)}`)
     }
-    if (results.length !== 7) {
-      throw new Error(`expected js, py, list, sandbox probe, sandbox store, large cell, peek; got ${results.length}`)
+    if (results.length !== 9) {
+      throw new Error(`expected js, py, list, sandbox probe, sandbox store, large cell, peek, release, after; got ${results.length}`)
     }
-    const [js, py, list, isolated, stored, large, peek] = results
+    const [js, py, list, isolated, stored, large, peek, release, after] = results
     if (!textOf(js).includes("JS_OK 42") || !textOf(js).includes(sandbox.marker)) {
       throw new Error(`JavaScript/read receipt missing: ${textOf(js)}`)
     }
@@ -290,6 +290,9 @@ async function main() {
       throw new Error(`sandbox store() was not refused with eval_isolate_no_state: ${textOf(stored)}`)
     }
     if (large.isError || peek.isError) throw new Error(`large sandbox cell: ${textOf(large)} / ${textOf(peek)}`)
+    if (!textOf(release).includes("RELEASED") || !textOf(after).includes("AFTER_LARGE")) {
+      throw new Error(`release/after cells: ${textOf(release)} / ${textOf(after)}`)
+    }
     if (!textOf(peek).includes("x".repeat(256)) || textOf(peek).includes("BIG_DONE")) {
       throw new Error(`peek did not show the streamed 4 MiB item before the cell settled: ${textOf(peek).slice(0, 400)}`)
     }
