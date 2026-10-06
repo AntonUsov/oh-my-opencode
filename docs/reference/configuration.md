@@ -563,6 +563,31 @@ Configured under `memory` in `omo.json`, with per-agent overrides under `memory.
 | `compile_warn_tokens`| `30000`    | Warn when the compiled memory block exceeds this many tokens                     |
 | `agents`             | `{}`       | Per-agent overrides; any block below may be overridden field by field            |
 
+#### Secret screening
+
+Memory never stores or shows secret-like text. One scanner covers seven pattern classes: AWS
+access keys, credential assignments (`token=`, `api_key:`, `password=` and similar), HTTP
+`Authorization: Bearer` headers, OpenAI-style `sk-` keys, vendor tokens (GitHub, GitLab and Slack
+prefixes), PEM private-key blocks, and credential keys split by whitespace. Before matching it
+strips zero-width and other invisible format characters and folds non-breaking spaces, so an
+obfuscated credential is still caught.
+
+- **Refused:** every commit path screens the staged file names and the full staged content. That
+  covers the `memory` tools, background facts extraction, and reflection and dream runs, whose whole
+  branch history is checked before it merges, including merge resolutions, renames and symlink
+  targets. A refused write leaves the repository as it was, and the error names the file and the
+  pattern class. A facts run refused this way parks its conversation after one failure; a refused
+  reflection or dream run counts as a non-retryable failure, so it reaches the park threshold
+  without the transient-failure backoff. The memory repository's pre-commit hook applies the same
+  classes to hand commits; it
+  cannot catch the invisible-character evasions, which the commit paths above do.
+- **Masked:** anything memory injects into a session, such as the compiled memory block, file
+  paths and names, recall hints and memory command output, has every match replaced with
+  `***`. That includes content committed before screening existed.
+
+The matched text itself never appears in an error, a log line or a notice; only the pattern class
+does.
+
 #### Reflection
 
 Reflection reviews the conversation and writes durable notes back into memory. An automatic run
