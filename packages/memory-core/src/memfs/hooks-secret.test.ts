@@ -48,15 +48,16 @@ describe("pre-commit hook secret screening", () => {
     // when
     const results = [
       await commit(dir, { "reference/$(printf probe).md": body }, "probe one"),
-      await commit(dir, { "reference/a'b\"c.md": body }, "probe two"),
+      // a double quote is not a legal Windows file name, so that probe runs on POSIX only
+      ...(process.platform === "win32" ? [] : [await commit(dir, { "reference/a'b\"c.md": body }, "probe two")]),
       await commit(dir, { [backtickName]: body }, "probe three"),
     ]
 
     // then: every name is refused on its blob, and no probe/id side effect ran
     for (const result of results) expect(result.code).not.toBe(0)
-    expect(results[2]?.stderr).toContain("secret-like content (vendor_token)")
+    expect(results.at(-1)?.stderr).toContain("secret-like content (vendor_token)")
     expect(existsSync(join(dir, "probe"))).toBe(false)
-    expect(results[2]?.stderr).not.toMatch(/^\d+$/)
+    expect(results.at(-1)?.stderr).not.toMatch(/^\d+$/)
   })
 
   it("#given a staged deletion #when committed #then the hook does not read a missing blob and commits", async () => {
