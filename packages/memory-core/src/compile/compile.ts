@@ -4,8 +4,10 @@ import { redactSecretLikeMaterial } from "../sync/redact"
 import {
   DEFAULT_EXTERNAL_PROJECTION_LIMITS,
   renderExternalProjection,
+  renderExternalProjectionStats,
   type ExternalProjectionInput,
   type ExternalProjectionLimits,
+  type ExternalProjectionStats,
 } from "./external-projection"
 import { renderSystemTree, type CompiledSystemFile } from "./render"
 
@@ -47,6 +49,16 @@ export async function compileMemoryBlockAtRevision(
   const projection = renderProjection(persona, identity, systemFiles, externalPaths, external)
   const metadata = renderMetadata(options)
   return [projection, metadata].filter((part) => part.length > 0).join("\n\n")
+}
+
+/** What `<external_projection>` would show at `revision` under `limits`, without compiling the block. */
+export async function externalProjectionStatsAt(
+  repo: GitMemoryRepo,
+  revision: string,
+  limits: ExternalProjectionLimits = DEFAULT_EXTERNAL_PROJECTION_LIMITS,
+): Promise<ExternalProjectionStats> {
+  const externalPaths = (await repo.lsTree(revision)).filter(isExternalPath)
+  return renderExternalProjectionStats(externalPaths, await projectionInput(repo, revision, externalPaths, limits))
 }
 
 async function projectionInput(

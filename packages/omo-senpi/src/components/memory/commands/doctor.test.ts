@@ -398,6 +398,64 @@ describe("/doctor", () => {
     expect(text).toContain("1")
   })
 
+  test("#given a projection inside its limits #when doctor runs #then it reports shown, omitted and bytes against the limits", async () => {
+    // given
+    const { pi, ctx } = await harness({
+      seeded: true,
+      deps: { loadSettings: () => ({ settings: memorySettings(), configPath: "/tmp/omo.jsonc" }) },
+    })
+
+    // when
+    const text = await invoke(pi, "doctor", "", ctx)
+
+    // then
+    expect(text).toMatch(/^\[ok\] projection: \d+ entries shown, 0 omitted, \d+ bytes \(limits 40\/dir, 24576 bytes\)$/m)
+  })
+
+  test("#given more names than the per-directory limit #when doctor runs #then the omitted count is a warning", async () => {
+    // given
+    const { identity, pi, ctx } = await harness({
+      seeded: false,
+      deps: {
+        loadSettings: () => ({
+          settings: memorySettings({ projection: { max_entries_per_directory: 1, max_bytes: 0 } }),
+          configPath: "/tmp/omo.jsonc",
+        }),
+      },
+    })
+    await seededRepo(identity, [
+      ...SEEDS,
+      { relativePath: "reference/a.md", content: "---\ndescription: A\n---\na\n" },
+      { relativePath: "reference/b.md", content: "---\ndescription: B\n---\nb\n" },
+    ])
+
+    // when
+    const text = await invoke(pi, "doctor", "", ctx)
+
+    // then
+    expect(text).toMatch(/^\[warn\] projection: 1 entries shown, 1 omitted, \d+ bytes \(limits 1\/dir, no byte limit\)$/m)
+  })
+
+  test("#given a byte limit below the floor #when doctor runs #then the overflow is reported", async () => {
+    // given
+    const { identity, pi, ctx } = await harness({
+      seeded: false,
+      deps: {
+        loadSettings: () => ({
+          settings: memorySettings({ projection: { max_entries_per_directory: 40, max_bytes: 10 } }),
+          configPath: "/tmp/omo.jsonc",
+        }),
+      },
+    })
+    await seededRepo(identity, [...SEEDS, { relativePath: "reference/a.md", content: "---\ndescription: A\n---\na\n" }])
+
+    // when
+    const text = await invoke(pi, "doctor", "", ctx)
+
+    // then
+    expect(text).toMatch(/^\[warn\] projection: 0 entries shown, 1 omitted, \d+ bytes \(limits 40\/dir, 10 bytes\); exceeds max_bytes by \d+ bytes \(floor\)$/m)
+  })
+
   test("#given a skill missing name frontmatter #when doctor runs #then the repair helper reports the fix", async () => {
     // given
     const { identity, pi, ctx } = await harness()
