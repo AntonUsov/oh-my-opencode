@@ -4,20 +4,32 @@
 // and the compiled block needs these times at every new HEAD of every session. Memory history only
 // grows, so the next revision is almost always a descendant of one already computed: only the commits
 // in between are read. The newest computed answer is kept in the common git dir for the next process.
+//
+// The kept map is UNFILTERED: every path any reachable commit touched, with its newest time. A path that
+// is deleted and later re-added therefore keeps its older touches, and an incremental answer equals a
+// full walk exactly (reach(rev) = reach(base) + base..rev, and the max over a union is the max of maxes).
 
+import { randomUUID } from "node:crypto"
 import { isAbsolute, join } from "node:path"
-import { readFile, rename, writeFile } from "../fs/resilient"
+import { readFile, rename, rm, writeFile } from "../fs/resilient"
 import type { GitRevisionRunner } from "./repo-revision-reads"
 
 const CACHE_SIZE = 4
 const FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
 const COMMIT_MARK = "\x01"
 const STORE_NAME = "omo-path-commit-times.json"
+const STORE_VERSION = 2
+/** A full walk runs once per repo (the store keeps its result); it must not hit the 30 s default. */
+const FULL_WALK_TIMEOUT_MS = 300_000
 
 type Times = ReadonlyMap<string, number>
+interface Computed {
+  readonly all: Times
+  readonly live: Times
+}
 
 export class PathCommitTimes {
-  private readonly computed = new Map<string, Promise<Times>>()
+  private readonly computed = new Map<string, Promise<Computed>>()
 
   constructor(
     private readonly dir: string,
@@ -27,8 +39,9 @@ export class PathCommitTimes {
 
   /**
    * Epoch-second time of the newest commit touching each path present at `revision`. Renames are not
-   * followed: the compiled tree is what is listed. The answer depends only on the revision, so a full
-   * object id is kept (four revisions, least recently used); a symbolic revision is resolved first.
+   * followed: the compiled tree is what is listed. A merge counts the paths it changed against its first
+   * parent. The answer depends only on the revision; a full object id is kept (four revisions, least
+   * recently used) and a symbolic revision is resolved first.
    */
   async at(revision: string): Promise<Times> {
     const oid = FULL_OBJECT_ID.test(revision) ? revision : await this.resolve(revision)
@@ -36,7 +49,7 @@ export class PathCommitTimes {
     if (cached !== undefined) {
       this.computed.delete(oid)
       this.computed.set(oid, cached)
-      return cached
+      return (await cached).live
     }
     const bases = [...this.computed.entries()].reverse()
     const pending = this.compute(oid, bases)
@@ -46,39 +59,48 @@ export class PathCommitTimes {
     })
     const oldest = this.computed.keys().next().value
     if (this.computed.size > CACHE_SIZE && oldest !== undefined) this.computed.delete(oldest)
-    return pending
+    return (await pending).live
   }
 
   private async resolve(revision: string): Promise<string> {
     return (await this.git.run(["rev-parse", "--verify", `${revision}^{commit}`])).stdout.trim()
   }
 
-  private async compute(oid: string, bases: ReadonlyArray<readonly [string, Promise<Times>]>): Promise<Times> {
+  private async compute(oid: string, bases: ReadonlyArray<readonly [string, Promise<Computed>]>): Promise<Computed> {
     const present = await this.lsTree(oid)
+    const all = await this.reachableTimes(oid, bases)
+    return { all, live: liveTimes(present, all) }
+  }
+
+  private async reachableTimes(oid: string, bases: ReadonlyArray<readonly [string, Promise<Computed>]>): Promise<Times> {
     const stored = await this.readStore()
     const candidates: Array<readonly [string, () => Promise<Times | null>]> = [
-      ...bases.map(([base, times]) => [base, () => times.catch(() => null)] as const),
+      ...bases.map(([base, computed]) => [base, () => computed.then((value) => value.all, () => null)] as const),
       ...(stored === null ? [] : [[stored.revision, async () => stored.times] as const]),
     ]
     for (const [base, load] of candidates) {
       if (base === oid) {
         const times = await load()
-        if (times !== null) return liveTimes(present, times, new Map())
+        if (times !== null) return times
+        continue
       }
       if (!(await this.isAncestor(base, oid))) continue
       const times = await load()
       if (times === null) continue
-      const result = liveTimes(present, times, parseLogTimes((await this.log([`${base}..${oid}`])).stdout))
+      const result = maxTimes(times, parseLogTimes((await this.log([`${base}..${oid}`])).stdout))
       if (base === stored?.revision) await this.writeStore(oid, result)
       return result
     }
-    const result = liveTimes(present, new Map(), parseLogTimes((await this.log([oid])).stdout))
+    const result = parseLogTimes((await this.log([oid], FULL_WALK_TIMEOUT_MS)).stdout)
     if (stored === null || (await this.isAncestor(stored.revision, oid))) await this.writeStore(oid, result)
     return result
   }
 
-  private log(range: readonly string[]): ReturnType<GitRevisionRunner["run"]> {
-    return this.git.run(["log", "--format=%x01%ct", "--name-only", "-z", "--no-renames", "--diff-filter=d", ...range, "--"])
+  private log(range: readonly string[], timeoutMs?: number): ReturnType<GitRevisionRunner["run"]> {
+    return this.git.run([
+      "log", "--format=%x01%ct", "--name-only", "-z", "--no-renames", "--diff-merges=first-parent",
+      "--diff-filter=d", ...range, "--",
+    ], timeoutMs)
   }
 
   private async isAncestor(ancestor: string, descendant: string): Promise<boolean> {
@@ -90,7 +112,7 @@ export class PathCommitTimes {
     return join(isAbsolute(common) ? common : join(this.dir, common), STORE_NAME)
   }
 
-  /** A missing, unreadable or malformed store is treated as absent: it is a cache, never a source of truth. */
+  /** A missing, unreadable or malformed store, or one with any invalid entry, is treated as absent. */
   private async readStore(): Promise<{ readonly revision: string; readonly times: Times } | null> {
     let parsed: unknown
     try {
@@ -100,21 +122,28 @@ export class PathCommitTimes {
     }
     if (typeof parsed !== "object" || parsed === null) return null
     const { version, revision, times } = parsed as { version?: unknown; revision?: unknown; times?: unknown }
-    if (version !== 1 || typeof revision !== "string" || !FULL_OBJECT_ID.test(revision)) return null
-    if (typeof times !== "object" || times === null) return null
-    const entries = Object.entries(times).filter((entry): entry is [string, number] => Number.isSafeInteger(entry[1]))
-    return { revision, times: new Map(entries) }
+    if (version !== STORE_VERSION || typeof revision !== "string" || !FULL_OBJECT_ID.test(revision)) return null
+    if (typeof times !== "object" || times === null || Array.isArray(times)) return null
+    const entries = Object.entries(times)
+    if (!entries.every((entry) => Number.isSafeInteger(entry[1]))) return null
+    return { revision, times: new Map(entries as Array<[string, number]>) }
   }
 
+  /** The store only saves a later walk: a failed write leaves every answer correct, so it never fails one. */
   private async writeStore(revision: string, times: Times): Promise<void> {
-    const path = await this.storePath()
-    const temp = `${path}.${process.pid}.tmp`
-    await writeFile(temp, `${JSON.stringify({ version: 1, revision, times: Object.fromEntries(times) })}\n`, "utf8")
-    await rename(temp, path)
+    let temp: string | undefined
+    try {
+      const path = await this.storePath()
+      temp = `${path}.${process.pid}.${randomUUID()}.tmp`
+      await writeFile(temp, `${JSON.stringify({ version: STORE_VERSION, revision, times: Object.fromEntries(times) })}\n`, "utf8")
+      await rename(temp, path)
+    } catch {
+      if (temp !== undefined) await rm(temp, { force: true }).catch(() => undefined)
+    }
   }
 }
 
-/** Newest commit time per path in a log range; the max keeps merges with skewed dates exact. */
+/** Newest commit time per path in a log range; git may list a child before an older-dated parent. */
 function parseLogTimes(stdout: string): Map<string, number> {
   const times = new Map<string, number>()
   let committedAt = Number.NaN
@@ -130,11 +159,17 @@ function parseLogTimes(stdout: string): Map<string, number> {
   return times
 }
 
-function liveTimes(present: readonly string[], base: Times, added: Times): Times {
+function maxTimes(base: Times, added: Times): Times {
+  const merged = new Map(base)
+  for (const [path, time] of added) merged.set(path, Math.max(merged.get(path) ?? time, time))
+  return merged
+}
+
+function liveTimes(present: readonly string[], all: Times): Times {
   const times = new Map<string, number>()
   for (const path of present) {
-    const newest = Math.max(base.get(path) ?? Number.NEGATIVE_INFINITY, added.get(path) ?? Number.NEGATIVE_INFINITY)
-    if (Number.isFinite(newest)) times.set(path, newest)
+    const time = all.get(path)
+    if (time !== undefined) times.set(path, time)
   }
   return times
 }

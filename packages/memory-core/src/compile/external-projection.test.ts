@@ -55,6 +55,46 @@ describe("renderExternalProjection limits", () => {
     expect(first).toMatch(/^big\/: (?:entry-\d\.md, )*entry-\d\.md \(\+\d+ more; read \$MEMORY_DIR\/big\/ to list\)$/m)
   })
 
+  it("#given a budget too small for the full render #when fitted #then only the wider directory gives up names", () => {
+    // given
+    const wide = Array.from({ length: 30 }, (_, index) => `zz/entry-${String(index).padStart(2, "0")}.md`)
+    const paths = ["aa/x1.md", "aa/x2.md", ...wide]
+    const times = at(Object.fromEntries(paths.map((path, index) => [path, index])))
+    const full = renderExternalProjection(paths, { times, limits: { maxEntriesPerDirectory: 0, maxBytes: 0 } })
+
+    // when
+    const text = renderExternalProjection(paths, { times, limits: { maxEntriesPerDirectory: 0, maxBytes: bytes(full) - 60 } })
+
+    // then
+    expect(bytes(text)).toBeLessThanOrEqual(bytes(full) - 60)
+    expect(text.split("\n")).toContain("aa/: x2.md, x1.md")
+    expect(text).toMatch(/^zz\/: entry-29\.md, .* \(\+\d+ more; read \$MEMORY_DIR\/zz\/ to list\)$/m)
+  })
+
+  it("#given a budget equal to the exact size of the full render #when fitted #then nothing is omitted", () => {
+    // given
+    const paths = ["a/1.md", "a/2.md", "b/1.md", "b/2.md", "c/1.md"]
+    const times = at(Object.fromEntries(paths.map((path, index) => [path, index])))
+    const full = renderExternalProjection(paths, { times, limits: { maxEntriesPerDirectory: 100, maxBytes: 0 } })
+
+    // when
+    const fitted = renderExternalProjection(paths, { times, limits: { maxEntriesPerDirectory: 100, maxBytes: bytes(full) } })
+
+    // then
+    expect(fitted).toBe(full)
+  })
+
+  it("#given a directory whose name is masked #when names are omitted #then the pointer names the nearest readable parent", () => {
+    // given
+    const paths = ["reference/AKIAABCDEFGHIJKLMNOP/a.md", "reference/AKIAABCDEFGHIJKLMNOP/b.md"]
+
+    // when
+    const text = renderExternalProjection(paths, { times: at({}), limits: { maxEntriesPerDirectory: 1, maxBytes: 0 } })
+
+    // then
+    expect(text).toContain("reference/***/: a.md (+1 more; read $MEMORY_DIR/reference/ to list)")
+  })
+
   it("#given a budget below the floor #when rendered #then the floor render is returned and the overflow is reported", () => {
     // given
     const paths = ["ARCHIVE.md", "a/x.md", "a/y.md", "b/z.md"]

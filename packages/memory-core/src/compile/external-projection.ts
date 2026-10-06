@@ -85,10 +85,12 @@ function layout(paths: readonly string[], input: ExternalProjectionInput | undef
       return a.name.localeCompare(b.name)
     })
     const names = entries.map((entry) => redactSecretLikeMaterial(entry.name))
-    const safe = directory === "" ? "" : `${directory.split("/").filter(Boolean).map(redactSecretLikeMaterial).join("/")}/`
+    const parts = directory.split("/").filter(Boolean)
+    const safe = directory === "" ? "" : `${parts.map(redactSecretLikeMaterial).join("/")}/`
+    const readable = parts.slice(0, firstRedacted(parts))
     return {
       label: directory === "" ? `${MEMORY_DIR}/` : safe,
-      pointer: `${MEMORY_DIR}/${safe}`,
+      pointer: `${MEMORY_DIR}/${readable.length === 0 ? "" : `${readable.join("/")}/`}`,
       names,
       nameBytes: names.map((name) => Buffer.byteLength(name)),
     }
@@ -145,6 +147,11 @@ function render({ rootBare, directories, allowances }: Layout): string {
   })
   lines.push(CLOSE)
   return lines.join("\n")
+}
+
+function firstRedacted(parts: readonly string[]): number {
+  const index = parts.findIndex((part) => redactSecretLikeMaterial(part) !== part)
+  return index === -1 ? parts.length : index
 }
 
 function marker(omitted: number, pointer: string): string {

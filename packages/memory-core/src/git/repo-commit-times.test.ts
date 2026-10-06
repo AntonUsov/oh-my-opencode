@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import { realpathSync } from "node:fs"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { createNodeGitExec, GitMemoryRepo, type GitExec } from "./index"
@@ -155,23 +155,165 @@ describe("GitMemoryRepo.pathCommitTimes", () => {
     expect(times.get("b.md")).toBe(seconds("2026-01-01T00:00:02Z"))
   })
 
-  it("#given a corrupt stored cache #when read #then the full history is used and the answer is correct", async () => {
+  for (const [label, store] of [
+    ["truncated JSON", (revision: string) => `{"version":2,"revision":"${revision}","times":{"a.md":`],
+    ["one non-integer entry in valid JSON", (revision: string) => JSON.stringify({ version: 2, revision, times: { "a.md": "soon", "b.md": 1 } })],
+  ] as const) {
+    it(`#given a stored cache with ${label} #when read #then the whole store is ignored and the full history answers`, async () => {
+      // given
+      const { dir, heads } = await repoWithHistory([
+        { write: { "a.md": "1" }, at: "2026-01-01T00:00:01Z" },
+        { write: { "b.md": "1" }, at: "2026-01-01T00:00:02Z" },
+      ])
+      await writeFile(join(dir, ".git", "omo-path-commit-times.json"), store(heads[0] ?? ""))
+      const counting = countingExec()
+      const fresh = new GitMemoryRepo({ dir, agentId: "agent", exec: counting.exec })
+
+      // when
+      const times = await fresh.pathCommitTimes(heads[1] ?? "")
+
+      // then
+      expect(counting.logRanges()).toEqual([heads[1] ?? ""])
+      expect(times.get("a.md")).toBe(seconds("2026-01-01T00:00:01Z"))
+    })
+  }
+
+  it("#given a path deleted before the stored base and re-added after it #when read warm and cold #then both give its newest touch", async () => {
+    // given
+    const { dir, heads } = await repoWithHistory([
+      { write: { "p.md": "1", "keep.md": "1" }, at: "2030-01-01T00:00:00Z" },
+      { remove: ["p.md"], at: "2026-01-02T00:00:00Z" },
+      { write: { "p.md": "2" }, at: "2026-01-03T00:00:00Z" },
+    ])
+    await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(heads[1] ?? "")
+
+    // when
+    const warm = await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(heads[2] ?? "")
+    await rm(join(dir, ".git", "omo-path-commit-times.json"))
+    const cold = await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(heads[2] ?? "")
+
+    // then
+    expect(warm.get("p.md")).toBe(seconds("2030-01-01T00:00:00Z"))
+    expect(Object.fromEntries(warm)).toEqual(Object.fromEntries(cold))
+  })
+
+  it("#given the deleted-then-re-added path read twice in one process #when the second read builds on the first #then it still gives the newest touch", async () => {
+    // given
+    const { dir, heads } = await repoWithHistory([
+      { write: { "p.md": "1", "keep.md": "1" }, at: "2030-01-01T00:00:00Z" },
+      { remove: ["p.md"], at: "2026-01-02T00:00:00Z" },
+      { write: { "p.md": "2" }, at: "2026-01-03T00:00:00Z" },
+    ])
+    const repo = new GitMemoryRepo({ dir, agentId: "agent" })
+    await repo.pathCommitTimes(heads[1] ?? "")
+    await rm(join(dir, ".git", "omo-path-commit-times.json"))
+
+    // when
+    const later = await repo.pathCommitTimes(heads[2] ?? "")
+
+    // then
+    expect(later.get("p.md")).toBe(seconds("2030-01-01T00:00:00Z"))
+  })
+
+  it("#given a merge whose side branch is dated before the trunk #when read warm and cold #then both give the newest touch", async () => {
+    // given
+    const { dir, heads } = await repoWithHistory([{ write: { "a.md": "1" }, at: "2026-01-01T00:00:00Z" }])
+    const git = createNodeGitExec()
+    const at = (iso: string) => ({ ...process.env, GIT_AUTHOR_DATE: iso, GIT_COMMITTER_DATE: iso })
+    const run = (argv: readonly string[], env = process.env) => git.run(argv, { cwd: dir, timeoutMs: 30_000, env })
+    await run(["checkout", "-q", "-b", "side"])
+    await writeFile(join(dir, "side.md"), "side")
+    await run(["add", "-A"], at("2026-03-01T00:00:00Z"))
+    await run(["commit", "-q", "-m", "side"], at("2026-03-01T00:00:00Z"))
+    await run(["checkout", "-q", "main"])
+    await writeFile(join(dir, "a.md"), "trunk")
+    await run(["add", "-A"], at("2026-05-01T00:00:00Z"))
+    await run(["commit", "-q", "-m", "trunk"], at("2026-05-01T00:00:00Z"))
+    await run(["merge", "-q", "--no-ff", "-m", "merge", "side"], at("2026-02-01T00:00:00Z"))
+    const merged = ((await run(["rev-parse", "HEAD"])).stdout).trim()
+    await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(heads[0] ?? "")
+
+    // when
+    const warm = await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(merged)
+    await rm(join(dir, ".git", "omo-path-commit-times.json"))
+    const cold = await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(merged)
+
+    // then
+    expect(warm.get("side.md")).toBe(seconds("2026-03-01T00:00:00Z"))
+    expect(warm.get("a.md")).toBe(seconds("2026-05-01T00:00:00Z"))
+    expect(Object.fromEntries(warm)).toEqual(Object.fromEntries(cold))
+  })
+
+  it("#given a file changed only in a merge commit #when read #then the merge refreshes its time", async () => {
+    // given
+    const { dir } = await repoWithHistory([{ write: { "a.md": "1", "c.md": "1" }, at: "2026-01-01T00:00:00Z" }])
+    const git = createNodeGitExec()
+    const at = (iso: string) => ({ ...process.env, GIT_AUTHOR_DATE: iso, GIT_COMMITTER_DATE: iso })
+    const run = (argv: readonly string[], env = process.env) => git.run(argv, { cwd: dir, timeoutMs: 30_000, env })
+    await run(["checkout", "-q", "-b", "side"])
+    await writeFile(join(dir, "a.md"), "side")
+    await run(["commit", "-qam", "side"], at("2026-02-01T00:00:00Z"))
+    await run(["checkout", "-q", "main"])
+    await run(["merge", "-q", "--no-ff", "--no-commit", "side"], at("2026-06-01T00:00:00Z"))
+    await writeFile(join(dir, "c.md"), "resolved in the merge")
+    await run(["add", "-A"], at("2026-06-01T00:00:00Z"))
+    await run(["commit", "-q", "-m", "merge"], at("2026-06-01T00:00:00Z"))
+    const merged = ((await run(["rev-parse", "HEAD"])).stdout).trim()
+
+    // when
+    const times = await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(merged)
+
+    // then
+    expect(times.get("c.md")).toBe(seconds("2026-06-01T00:00:00Z"))
+  })
+
+  it("#given a store saved at a later revision #when an ancestor is read #then the later store is kept", async () => {
     // given
     const { dir, heads } = await repoWithHistory([
       { write: { "a.md": "1" }, at: "2026-01-01T00:00:01Z" },
-      { write: { "a.md": "2" }, at: "2026-01-01T00:00:02Z" },
+      { write: { "b.md": "1" }, at: "2026-01-01T00:00:02Z" },
     ])
-    await writeFile(join(dir, ".git", "omo-path-commit-times.json"), `{"version":1,"revision":"${heads[0]}","times":{"a.md":"soon"}`)
-    const counting = countingExec()
-    const fresh = new GitMemoryRepo({ dir, agentId: "agent", exec: counting.exec })
+    await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(heads[1] ?? "")
+    const storePath = join(dir, ".git", "omo-path-commit-times.json")
+    const before = await readFile(storePath, "utf8")
 
     // when
-    const times = await fresh.pathCommitTimes(heads[1] ?? "")
+    await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(heads[0] ?? "")
 
     // then
-    expect(counting.logRanges()).toEqual([heads[1] ?? ""])
-    expect(times.get("a.md")).toBe(seconds("2026-01-01T00:00:02Z"))
+    expect(await readFile(storePath, "utf8")).toBe(before)
+    expect(JSON.parse(before).revision).toBe(heads[1])
   })
+
+  it("#given a git dir the store cannot be written to #when read #then the times are still returned", async () => {
+    // given
+    const { dir, heads } = await repoWithHistory([{ write: { "a.md": "1" }, at: "2026-01-01T00:00:01Z" }])
+    await mkdir(join(dir, ".git", "omo-path-commit-times.json"))
+
+    // when
+    const times = await new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(heads[0] ?? "")
+
+    // then
+    expect(times.get("a.md")).toBe(seconds("2026-01-01T00:00:01Z"))
+    expect((await readdir(join(dir, ".git"))).filter((name) => name.endsWith(".tmp"))).toEqual([])
+  })
+
+  it("#given cold reads of different revisions racing in one process #when they finish #then every read succeeds", async () => {
+    // given
+    const { dir, heads } = await repoWithHistory([
+      { write: { "a.md": "1" }, at: "2026-01-01T00:00:01Z" },
+      { write: { "b.md": "1" }, at: "2026-01-01T00:00:02Z" },
+      { write: { "c.md": "1" }, at: "2026-01-01T00:00:03Z" },
+      { write: { "d.md": "1" }, at: "2026-01-01T00:00:04Z" },
+    ])
+
+    // when
+    const reads = await Promise.allSettled(Array.from({ length: 5 }, () =>
+      heads.map((head) => new GitMemoryRepo({ dir, agentId: "agent" }).pathCommitTimes(head))).flat())
+
+    // then
+    expect(reads.filter((read) => read.status === "rejected")).toEqual([])
+  }, 30_000)
 
   it("#given an unknown revision #when read #then it rejects with the git error instead of an empty map", async () => {
     // given

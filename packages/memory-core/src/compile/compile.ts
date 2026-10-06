@@ -68,8 +68,13 @@ async function projectionInput(
   limits: ExternalProjectionLimits = DEFAULT_EXTERNAL_PROJECTION_LIMITS,
 ): Promise<ExternalProjectionInput> {
   const bounded = limits.maxEntriesPerDirectory > 0 || limits.maxBytes > 0
-  const times = bounded && revision && externalPaths.length > 0 ? await repo.pathCommitTimes(revision) : new Map<string, number>()
-  return { times, limits }
+  if (!bounded || !revision || externalPaths.length === 0) return { times: new Map(), limits }
+  try {
+    return { times: await repo.pathCommitTimes(revision), limits }
+  } catch {
+    // Commit times only order names; without them the same limits apply in name order.
+    return { times: new Map(), limits }
+  }
 }
 
 async function readSystemFiles(
