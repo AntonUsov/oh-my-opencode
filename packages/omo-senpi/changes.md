@@ -1,3 +1,17 @@
+## 2026-10-06 - A delivered message tells the receiver who sent it (#9660)
+
+The gateway drain now hands the receiving session the sender and the message as written, apart from the provenance header:
+- `deliverySender` in `gateway/provenance.ts` builds the sender: `agent` with the sending session's id and its name at send time, `command_line` for `omo thread send`, or `external` with the platform and author.
+- `drain.ts` passes it with `display_text` to `admitExternalMessage`.
+
+The model still reads the `[OMO_GATEWAY v=1 ...]` header. senpi's terminal renders the sender as "Sent by another agent · <name>" or "Sent from the command line" (senpi#2819); a senpi without that support ignores the two fields.
+
+Tests (`engine.test.ts`):
+- a named and an unnamed session sender;
+- a command-line sender.
+
+Dropping the sender, or naming a session by its id, fails them.
+
 ## 2026-10-05 - An idle gateway store no longer keeps its worker thread alive
 
 Every session that touches the gateway store (each terminal with a control endpoint, and every sender) started one store worker thread and kept it until the session ended. A measured idle worker retains 2.94 MB: an empty Bun worker plus the bundled store code and SQLite. That put the terminal control endpoint's idle cost at about 4.1 MB against the 3 MB budget.
