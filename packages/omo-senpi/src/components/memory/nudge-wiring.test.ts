@@ -262,6 +262,37 @@ describe("createMemoryNudgeWiring", () => {
     expect(await wiring.nudgeTurns(repo, "session-busy", context.identity)).toBeUndefined()
   }, 60_000)
 
+  test("#given another session whose id starts with this one's saved later #when this session checks #then only this session's own save counts", async () => {
+    // given
+    const { context, repo } = await fixture()
+    const pi = new MemoryFakeExtensionAPI()
+    const wiring = createMemoryNudgeWiring({
+      resolveContext: () => context,
+      resolveSettings: () => ({ enabled: true, everyUserTurns: 2 }),
+    })
+    wiring.register(pi)
+    await pi.dispatch("session_start", {}, eventContext("x", [{
+      type: "custom",
+      customType: ACCEPTED_TURNS_ENTRY_TYPE,
+      data: { version: 1, sessionId: "x", priorUserTurns: 10, sessionBaselineTurns: 0 },
+    }]))
+    const save = async (file: string, session: string, turn: number) => {
+      await writeFile(join(repo.dir, file), `${file}\n`)
+      await repo.commitWrite(
+        [file],
+        `save memory\n\nOmo-Writer: memory-tool\nOmo-Session: ${session}\nOmo-Turn: ${turn}`,
+        { agentId: context.identity, authorName: context.identity },
+      )
+    }
+
+    // when: "x" saved at turn 1; "x2" (whose trailer also contains "Omo-Session: x") saved at turn 9
+    await save("x.md", "x", 1)
+    await save("x2.md", "x2", 9)
+
+    // then: 10 accepted turns - saved at 1 = 9 since the save, so the nudge fires
+    expect(await wiring.nudgeTurns(repo, "x", context.identity)).toBe(9)
+  }, 30_000)
+
   test("#given a bound non-auto identity #when a memory MCP tool call starts #then unforgeable identity and accepted-turn provenance are injected in place", async () => {
     // given
     const { context } = await fixture()
