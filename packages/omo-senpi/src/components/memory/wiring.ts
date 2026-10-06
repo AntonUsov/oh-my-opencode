@@ -209,6 +209,8 @@ export function createMemoryWiring(options: MemoryWiringOptions): MemoryWiring {
     },
 
     async onSessionShutdown(input: ShutdownDrainInput): Promise<void> {
+      // Background packing is never worth holding an exit for: stop it before the drain.
+      maintenance.dispose()
       // The journal flush runs FIRST, before the pre-drain awaits can consume the fixed budget:
       // the transcript bytes are already on disk (append writes immediately, flush is fsync), so
       // one first-position flush captures everything and the drain must never re-run it.

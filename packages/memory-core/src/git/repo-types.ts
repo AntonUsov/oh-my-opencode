@@ -70,6 +70,8 @@ export interface GitMaintenanceOptions {
   readonly minLooseObjects: number
   /** Upper bound for the maintenance run itself. */
   readonly timeoutMs: number
+  /** Stops the run (session exit). git is sent SIGTERM and removes its own temp files. */
+  readonly signal?: AbortSignal
 }
 
 export type GitMaintenanceResult =

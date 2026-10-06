@@ -1,6 +1,12 @@
 import { existsSync } from "node:fs"
 
-import { GitMemoryRepo } from "@oh-my-opencode/memory-core"
+import {
+  GitMemoryRepo,
+  LockContentionError,
+  createLockRecord,
+  memoryMaintenanceLockPath,
+  withLock,
+} from "@oh-my-opencode/memory-core"
 
 import type { MemoryIdentityContext } from "./context"
 
@@ -25,7 +31,7 @@ export interface MemoryMaintenanceOptions {
 export interface MemoryMaintenance {
   /** Schedules one background pass for this identity; repeated calls in this process are no-ops. */
   schedule(context: MemoryIdentityContext): void
-  /** Cancels a pass that has not started yet. */
+  /** Cancels passes not yet started and stops a running one (session exit). */
   dispose(): void
   /** Resolves once every scheduled pass has run (or failed, or been disposed). */
   settled(): Promise<void>
@@ -40,9 +46,17 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
 
 /**
  * Keeps the memory repo packed off the hot path (#9667). Commits set `gc.auto=0` so no commit waits on
- * a repack; this background pass is what packs the loose objects instead. It runs after a delay, at most
- * once per interval per identity (the stamp lives in the repo's own config, so every session and process
- * shares it), and only when there are enough loose objects to matter. Failures are logged, never raised.
+ * a repack; this background pass is what packs the loose objects instead.
+ *
+ * - One runner per identity across every session and process: the pass holds the identity's
+ *   `memory-maintenance` lock and a session that finds it held skips (it never waits).
+ * - At most once per interval: the stamp lives in the repo's own config and is read and written while
+ *   holding that lock, so many sessions starting together still produce one pass.
+ * - Safe with concurrent commits: `GitMemoryRepo.maintain()` only packs and then deletes loose copies of
+ *   objects a pack already holds (`prune-packed`); it never prunes unreachable objects, so an object a
+ *   writer has just created is never removed.
+ * - Off the hot path: it starts after a delay, the timer never keeps a process alive, `dispose()` (session
+ *   exit) cancels it and stops a running git, and every failure is logged, never raised.
  */
 export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}): MemoryMaintenance {
   const createRepo = options.createRepo
@@ -52,6 +66,7 @@ export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}):
   const minLooseObjects = options.minLooseObjects ?? DEFAULT_MIN_LOOSE_OBJECTS
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const now = options.now ?? Date.now
+  const abort = new AbortController()
   const scheduled = new Set<string>()
   const timers = new Map<ReturnType<typeof setTimeout>, () => void>()
   const running = new Set<Promise<void>>()
@@ -59,25 +74,33 @@ export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}):
   async function run(context: MemoryIdentityContext): Promise<void> {
     // A transient identity has no repo until it is promoted.
     if (!existsSync(context.identityPaths.repo)) return
-    const repo = createRepo(context)
-    const last = Number(await repo.configGet(STAMP_KEY) ?? Number.NaN)
-    if (Number.isFinite(last) && now() - last < intervalMs) return
-    // Claim the interval before the run, so a second session starting meanwhile skips it; git's own
-    // maintenance lock is the backstop if two still overlap.
-    await repo.configSet(STAMP_KEY, String(now()))
-    const result = await repo.maintain({ minLooseObjects, timeoutMs })
-    if (result.status === "packed") {
-      options.logger?.info("omo-senpi memory repo packed", {
-        identity: context.identity,
-        looseObjectsBefore: result.looseObjectsBefore,
-        looseObjectsAfter: result.looseObjectsAfter,
-      })
+    const record = await createLockRecord("memory-maintenance", { runId: `maintenance-${process.pid}` })
+    try {
+      await withLock(memoryMaintenanceLockPath(context.identityPaths.locks), record, async () => {
+        abort.signal.throwIfAborted()
+        const repo = createRepo(context)
+        const last = Number(await repo.configGet(STAMP_KEY) ?? Number.NaN)
+        if (Number.isFinite(last) && now() - last < intervalMs) return
+        await repo.configSet(STAMP_KEY, String(now()))
+        const result = await repo.maintain({ minLooseObjects, timeoutMs, signal: abort.signal })
+        if (result.status === "packed") {
+          options.logger?.info("omo-senpi memory repo packed", {
+            identity: context.identity,
+            looseObjectsBefore: result.looseObjectsBefore,
+            looseObjectsAfter: result.looseObjectsAfter,
+          })
+        }
+      }, { waitTimeoutMs: 0 })
+    } catch (error) {
+      // Another session or process holds the pass: it is that runner's job, not a failure.
+      if (error instanceof LockContentionError) return
+      throw error
     }
   }
 
   return {
     schedule(context): void {
-      if (scheduled.has(context.identity)) return
+      if (abort.signal.aborted || scheduled.has(context.identity)) return
       scheduled.add(context.identity)
       let finish = (): void => {}
       const pass = new Promise<void>((resolve) => {
@@ -87,6 +110,7 @@ export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}):
       const timer = setTimeout(() => {
         timers.delete(timer)
         void run(context).catch((error: unknown) => {
+          if (abort.signal.aborted) return
           options.logger?.warn("omo-senpi memory repo maintenance failed", {
             identity: context.identity,
             error: error instanceof Error ? error.message : String(error),
@@ -98,6 +122,7 @@ export function createMemoryMaintenance(options: MemoryMaintenanceOptions = {}):
       timers.set(timer, finish)
     },
     dispose(): void {
+      abort.abort()
       for (const [timer, finish] of timers) {
         clearTimeout(timer)
         finish()

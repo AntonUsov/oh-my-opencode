@@ -5,7 +5,13 @@ import { mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { GitMemoryRepo, buildIdentityPaths } from "@oh-my-opencode/memory-core"
+import {
+  GitMemoryRepo,
+  buildIdentityPaths,
+  createLockRecord,
+  memoryMaintenanceLockPath,
+  withLock,
+} from "@oh-my-opencode/memory-core"
 
 import { createMemoryBinding } from "./binding"
 import { createMemoryIdentityContext } from "./context"
@@ -129,4 +135,72 @@ describe("createMemoryMaintenance", () => {
     expect(log.warn).toEqual([])
     expect(log.info).toEqual([])
   }, 30_000)
+
+  test("#given ten sessions bind to the same identity at once #when their passes come due #then exactly one pack runs", async () => {
+    // given
+    const { context, repo } = await identityWithHistory(20)
+    const log = recorder()
+    const runners = Array.from({ length: 10 }, () => createMemoryMaintenance({ logger: log.logger, delayMs: 0, minLooseObjects: 10 }))
+
+    // when
+    for (const runner of runners) runner.schedule(context)
+    await Promise.all(runners.map((runner) => runner.settled()))
+
+    // then
+    expect(log.info).toEqual(["omo-senpi memory repo packed"])
+    expect(log.warn).toEqual([])
+    expect(looseObjects(repo.dir)).toBe(0)
+  }, 60_000)
+
+  test("#given another process holds the maintenance lock #when this session's pass comes due #then it skips without packing or warning", async () => {
+    // given
+    const { context, repo } = await identityWithHistory(20)
+    const before = looseObjects(repo.dir)
+    const log = recorder()
+    const maintenance = createMemoryMaintenance({ logger: log.logger, delayMs: 0, minLooseObjects: 10 })
+    const holder = await createLockRecord("memory-maintenance", { runId: "other-process" })
+
+    // when
+    await withLock(memoryMaintenanceLockPath(context.identityPaths.locks), holder, async () => {
+      maintenance.schedule(context)
+      await maintenance.settled()
+    })
+
+    // then
+    expect(looseObjects(repo.dir)).toBe(before)
+    expect(log.info).toEqual([])
+    expect(log.warn).toEqual([])
+  }, 60_000)
+
+  test("#given a pass is scheduled #when the session exits first #then nothing runs and nothing is logged", async () => {
+    // given
+    const { context, repo } = await identityWithHistory(20)
+    const before = looseObjects(repo.dir)
+    const log = recorder()
+    const maintenance = createMemoryMaintenance({ logger: log.logger, delayMs: 60_000, minLooseObjects: 10 })
+    maintenance.schedule(context)
+
+    // when
+    maintenance.dispose()
+    await maintenance.settled()
+
+    // then
+    expect(looseObjects(repo.dir)).toBe(before)
+    expect(log.info).toEqual([])
+    expect(log.warn).toEqual([])
+  }, 60_000)
+
+  test("#given a loose object no commit references yet (a writer mid-commit) #when a pass packs the repo #then that object is kept", async () => {
+    // given
+    const { context, repo } = await identityWithHistory(20)
+    const pending = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: repo.dir, input: "staged by a writer\n", encoding: "utf8" }).trim()
+    const maintenance = createMemoryMaintenance({ delayMs: 0, minLooseObjects: 10 })
+
+    // when
+    maintenance.schedule(context)
+    await maintenance.settled()
+
+    // then
+    expect(execFileSync("git", ["cat-file", "-p", pending], { cwd: repo.dir, encoding: "utf8" })).toBe("staged by a writer\n")
+  }, 60_000)
 })

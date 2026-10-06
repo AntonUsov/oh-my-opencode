@@ -208,8 +208,9 @@ export class GitMemoryRepo {
   async maintain(options: GitMaintenanceOptions): Promise<GitMaintenanceResult> {
     const looseObjectsBefore = await this.countLooseObjects()
     if (looseObjectsBefore < options.minLooseObjects) return { status: "skipped", looseObjects: looseObjectsBefore }
-    await this.git(["maintenance", "run", "--task=loose-objects", "--quiet"], options.timeoutMs)
-    await this.git(["prune-packed", "--quiet"], options.timeoutMs)
+    await this.git(["maintenance", "run", "--task=loose-objects", "--quiet"], options.timeoutMs, options.signal)
+    options.signal?.throwIfAborted()
+    await this.git(["prune-packed", "--quiet"], options.timeoutMs, options.signal)
     return { status: "packed", looseObjectsBefore, looseObjectsAfter: await this.countLooseObjects() }
   }
 
@@ -291,16 +292,22 @@ export class GitMemoryRepo {
     return head
   }
 
-  private async git(argv: readonly string[], timeoutMs?: number): Promise<GitExecResult> {
-    const result = await this.gitResult(argv, undefined, timeoutMs)
+  private async git(argv: readonly string[], timeoutMs?: number, signal?: AbortSignal): Promise<GitExecResult> {
+    const result = await this.gitResult(argv, undefined, timeoutMs, signal)
     if (result.code !== 0) throw commandError(argv, result)
     return result
   }
 
-  private gitResult(argv: readonly string[], stdin?: string, timeoutMs = GIT_TIMEOUT_MS): Promise<GitExecResult> {
+  private gitResult(
+    argv: readonly string[],
+    stdin?: string,
+    timeoutMs = GIT_TIMEOUT_MS,
+    signal?: AbortSignal,
+  ): Promise<GitExecResult> {
     return this.exec.run(argv, {
       cwd: this.dir,
       timeoutMs,
+      ...(signal === undefined ? {} : { signal }),
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
       ...(stdin === undefined ? {} : { stdin }),
     })
