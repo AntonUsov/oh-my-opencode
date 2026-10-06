@@ -1,3 +1,13 @@
+## 2026-10-07 - The Windows task e2e waits for the child's completion instead of reading once (#9481)
+
+`scripts/qa/task-rpc-e2e.mjs` checked `completion_push_arrives` by reading the task records once, right after scenario A's parent session returned. On a slow Windows runner the child's completion write can land just after that read, so the check failed with "no completion recorded" while every other check passed (#9222, #9331 twice, #9529, #9655).
+
+- `scripts/qa/task-rpc-e2e-scenarios.mjs`: new `waitForProcessCompletion(stateDir, timeoutMs = 60 s)`. It waits for a process-mode record to reach `completed` through the existing `waitForRecord` (file watchers plus a 250 ms re-read, with a read after the watchers start so a write in between is not missed). Past the deadline it returns the process tasks' last statuses.
+- The driver uses it, and the FAIL reason and facts now carry the last observed status.
+- `task-rpc-e2e-scenarios.test.mjs`:
+  - a record that is still `running` when the check starts and turns `completed` right after: the old single read reports no completion, and the wait reports it;
+  - a child that never completes: the wait fails at its deadline with `lastStatuses: ["running"]`.
+
 ## 2026-10-06 - The memory nudge no longer walks the whole memory history on every prompt, and the memory repo gets packed (#9667)
 
 Every prompt's `before_agent_start` asked git whether this session had saved memory yet, with `git log --grep` over the identity's entire history. Commits set `gc.auto=0`, so the repo was never packed. A long-lived identity measured 11,821 commits and 41,588 loose objects (632 MiB) next to a 3.6 MiB pack. The query took up to 2.2 s per prompt on an idle machine and passed the 30 s git timeout under memory pressure, and the timeout then escaped the extension as a raw `Extension omo.js error: git log ... timed out after 30000ms` stack in the TUI.

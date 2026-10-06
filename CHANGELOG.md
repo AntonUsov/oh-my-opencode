@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+**omo runs on senpi 2026.10.10-4.** The input box no longer gets pushed off-screen when something writes to the terminal behind the TUI ([senpi#2815](https://github.com/code-yeongyu/senpi/issues/2815)). A default extension shim left behind by an earlier install (for example after switching from npm to bun or to the standalone binary) no longer stops every start with `Cannot find module` ([senpi#2765](https://github.com/code-yeongyu/senpi/issues/2765)). Two processes rebinding the same session no longer fail with `ENOENT` ([senpi#2828](https://github.com/code-yeongyu/senpi/issues/2828)). In code mode, a stopped detached cell shows its output instead of reading as still running, and an isolated cell names QuickJS as its runtime ([senpi#2811](https://github.com/code-yeongyu/senpi/issues/2811)). Full list: [senpi 2026.10.10-4](https://github.com/code-yeongyu/senpi/releases/tag/v2026.10.10-4).
+
 ## [5.1.21] - 2026-10-06
 
 **5.1.20 was never published.** Its run stopped on a Windows smoke-test failure after the platform packages reached npm but before `omo-ai` did, so 5.1.21 is the first release carrying the changes below. The orphaned `oh-my-opencode-<platform>@5.1.20` packages are not installed by any `omo-ai` or `oh-my-opencode` release, and this release moves their `latest` tag on. ([#9618](https://github.com/code-yeongyu/oh-my-openagent/issues/9618))
