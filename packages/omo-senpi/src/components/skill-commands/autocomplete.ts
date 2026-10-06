@@ -22,10 +22,12 @@ export interface AutocompleteProviderLike {
   ): Promise<AutocompleteSuggestionsLike | null>
 }
 
-const LEADING_COMMAND_TOKEN = /^\/([a-z0-9-]+)$/
+const LEADING_COMMAND_TOKEN = /^\/([a-z0-9-]*)$/
 
 /**
- * Adds the bare `/<bundled-skill>` names next to senpi's `skill:<name>` entries. Every other
+ * Lists each bundled skill once at top level: its bare `/<name>` alias takes the place of senpi's
+ * `skill:<name>` row (#9648). `/skill:` lists stay senpi's own, and a skill whose bare name a
+ * same-named command shadows keeps its `skill:<name>` row, the only way left to reach it. Every other
  * provider member (applyCompletion, trigger characters, mention ranges, ...) is the wrapped
  * provider's own, so completion and rendering stay senpi's.
  */
@@ -42,7 +44,11 @@ export function wrapWithBareSkillCommands<T extends AutocompleteProviderLike>(
     const items = base?.items ?? []
     const aliases = bareSkillItems(typed, bundledSkillNames, hostCommands(), items)
     if (aliases.length === 0) return base
-    return { prefix: base?.prefix ?? `/${typed}`, items: mergeBeforeSkillEntries(items, aliases) }
+    // A bare `/` lists everything senpi has, so an alias only replaces a row that is there; past `/`, an
+    // alias whose skill row is not on this page is still offered.
+    const merged = replaceSkillEntries(items, aliases, { appendUnplaced: typed.length > 0 })
+    if (merged === undefined) return base
+    return { prefix: base?.prefix ?? `/${typed}`, items: merged }
   }
   return new Proxy(current, {
     get(target, property) {
@@ -78,24 +84,26 @@ function bareSkillItems(
     })
 }
 
-// Each alias sits directly above its own `skill:<name>` row, so senpi's ranking of everything else
-// is untouched; an alias whose skill row is absent from this page goes last.
-function mergeBeforeSkillEntries(
+// Each alias takes its own `skill:<name>` row's place, so senpi's ranking of everything else is
+// untouched; an alias whose skill row is absent from this page goes last when `appendUnplaced`.
+// Undefined when nothing changed.
+function replaceSkillEntries(
   items: readonly AutocompleteItemLike[],
   aliases: readonly AutocompleteItemLike[],
-): AutocompleteItemLike[] {
+  options: { readonly appendUnplaced: boolean },
+): AutocompleteItemLike[] | undefined {
   const taken = new Set(items.map((item) => item.value))
   const pending = new Map(aliases.filter((alias) => !taken.has(alias.value)).map((alias) => [alias.value, alias]))
-  const merged: AutocompleteItemLike[] = []
-  for (const item of items) {
+  const unplaced = new Set(pending.keys())
+  const merged = items.map((item) => {
     const alias = item.value.startsWith(SKILL_COMMAND_PREFIX)
       ? pending.get(item.value.slice(SKILL_COMMAND_PREFIX.length))
       : undefined
-    if (alias !== undefined) {
-      merged.push(alias)
-      pending.delete(alias.value)
-    }
-    merged.push(item)
-  }
-  return [...merged, ...pending.values()]
+    if (alias === undefined) return item
+    unplaced.delete(alias.value)
+    return alias
+  })
+  const appended = options.appendUnplaced ? [...unplaced].map((name) => pending.get(name)).filter((alias) => alias !== undefined) : []
+  if (unplaced.size === pending.size && appended.length === 0) return undefined
+  return [...merged, ...appended]
 }

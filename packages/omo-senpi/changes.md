@@ -1,3 +1,7 @@
+## 2026-10-06 - The slash picker lists each bundled skill once (#9648)
+
+`components/skill-commands/autocomplete.ts`: the top-level `/` list showed every bundled skill twice, as its bare alias (#9042) and its `skill:<name>` row. The alias now takes the `skill:<name>` row's place, so each skill is one row and senpi's ranking of everything else is unchanged; a bare `/` gets the same replacement, and past `/` an alias whose skill row is not on the page is still offered at the end. Typing `/skill:` still lists every skill under its `skill:` name. A skill whose bare name a same-named template or command shadows keeps its `skill:<name>` row, the only way left to reach it. Submitting either form is unchanged: the bare form is still rewritten to the `/skill:` form and recorded as a human invocation.
+
 ## 2026-10-05 - An idle gateway store no longer keeps its worker thread alive
 
 Every session that touches the gateway store (each terminal with a control endpoint, and every sender) started one store worker thread and kept it until the session ended. A measured idle worker retains 2.94 MB: an empty Bun worker plus the bundled store code and SQLite. That put the terminal control endpoint's idle cost at about 4.1 MB against the 3 MB budget.
