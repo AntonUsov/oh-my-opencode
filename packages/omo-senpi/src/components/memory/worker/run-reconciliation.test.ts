@@ -336,7 +336,7 @@ describe("reflection and dream run reconciliation", () => {
   test.each([
     ["final", undefined], ["final", "invalid"], ["final", 123], ["final", null],
     ["abandoned", undefined], ["abandoned", "invalid"], ["abandoned", 123], ["abandoned", null],
-  ] as const)("#given %s has invalid terminal timestamp %s #when reconciled #then corruption is reported without mutating state", async (terminal, timestamp) => {
+  ] as const)("#given %s has invalid terminal timestamp %s #when reconciled #then the run is quarantined with its artifact untouched and the queue moves on", async (terminal, timestamp) => {
     const item = await fixture()
     await retireRunGeneration(item, "2026-08-09T00:00:00.000Z", terminal)
     const path = join(item.runDir, `${terminal}.json`)
@@ -346,20 +346,22 @@ describe("reflection and dream run reconciliation", () => {
       [terminal === "final" ? "finishedAt" : "abandonedAt"]: timestamp,
     })
     await queuePendingReservation(item)
-    const before = await item.store.readState()
     const terminalBefore = await readFile(path, "utf8")
+    const launched: string[] = []
 
-    await expect(reconcileReflectionRuns({
+    const results = await reconcileReflectionRuns({
       identity: item.identity,
       reservation: item.store,
-      launch: () => { throw new Error("unexpected launch") },
+      launch: (run) => launched.push(run.runId),
       hostname: () => "fixture-host",
       now: () => Date.parse("2026-08-10T00:01:01.001Z"),
       getPidLiveness: () => "dead",
-    })).rejects.toThrow(TypeError)
+    })
 
-    expect(await item.store.readState()).toEqual(before)
+    expect(results).toEqual([{ runId: "run-orphan", outcome: "failed" }])
+    expect(JSON.parse(await readFile(join(item.runDir, "quarantined.json"), "utf8")).reason).toBe("invalid_generation_timestamps")
     expect(await readFile(path, "utf8")).toBe(terminalBefore)
+    expect(launched).toEqual(["run-pending"])
   }, 30_000)
 
   test("#given an old prelaunch worktree without a ledger and a confirmed-dead launcher #when reconciled #then resources and reservation are released", async () => {
