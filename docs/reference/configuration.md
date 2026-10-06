@@ -563,6 +563,25 @@ Configured under `memory` in `omo.json`, with per-agent overrides under `memory.
 | `compile_warn_tokens`| `30000`    | Warn when the compiled memory block exceeds this many tokens                     |
 | `agents`             | `{}`       | Per-agent overrides; any block below may be overridden field by field            |
 
+#### Memory file list in the prompt
+
+Every turn the compiled memory block ends with `<external_projection>`, one line per directory
+naming the memory files outside `system/`. Two limits keep it small on a large corpus. Each
+directory lists its most recently committed files first (ties by name). Names that do not fit are
+counted as `(+N more; read $MEMORY_DIR/<dir>/ to list)`, and every directory keeps its line.
+
+| Option                                 | Default | Description                                                                   |
+| -------------------------------------- | ------- | ----------------------------------------------------------------------------- |
+| `projection.max_entries_per_directory` | `40`    | Names listed per directory, newest first                                       |
+| `projection.max_bytes`                 | `24576` | Byte budget for the whole list; the largest directory gives up names first     |
+
+`0` disables a limit; both at `0` list every name in name order, as before. A budget smaller
+than one line per directory cannot be met: the list then shows only the directory lines with
+their counts, and `/doctor` reports the overflow. Both keys can be set per harness, per profile
+and per agent under `agents.<name>.projection`. `/doctor` prints a `projection` line with the
+names shown and omitted and the byte size. The line is a warning when names are omitted or the
+budget is overflowed. `/doctor --json` carries the same line in `checks`.
+
 #### Secret screening
 
 Memory never stores or shows secret-like text. One scanner covers seven pattern classes: AWS
@@ -718,9 +737,9 @@ It runs opportunistically when the session goes idle, and optionally at shutdown
 In Senpi, `/doctor` checks the working memory corpus and reports `ok`, `warn`, or
 `fail`. Existing checks are `repository`, `frontmatter`, `persona`, `soul-seed`,
 `locks`, `worktrees`, `abandoned-runs`, `quarantined-runs`, `receipts`,
-`reservation`, `reflection-health`, `tokens`, and the conditional `facts`
-advisory. The `skills` lines report the existing missing-name frontmatter
-repair.
+`reservation`, `reflection-health`, `tokens`, `projection` (see "Memory file list
+in the prompt"), and the conditional `facts` advisory. The `skills` lines report
+the existing missing-name frontmatter repair.
 
 `receipts` shows the newest outcome of each kind of memory maintenance, for
 example `dream merged 2d ago (run 1a2b3c4d); reflection failed 1h ago

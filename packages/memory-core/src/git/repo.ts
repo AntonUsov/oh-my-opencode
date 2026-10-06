@@ -7,9 +7,9 @@ import { createNodeGitExec, type GitExec, type GitExecResult } from "./exec"
 import { describeDirtyMarkdownEncodingIssues } from "./porcelain"
 import { GitPathStateStore } from "./path-state"
 import { authorFlags, commandError, normalizePathspecs, normalizeSeedPath } from "./repo-arguments"
-import { parseLogOutput, parseNulPaths } from "./repo-log"
 import { runMemoryRepoMaintenance } from "./repo-maintenance"
-import { parseCatFileBatch, parseLsTreeBlobs, parseLsTreeSized } from "./repo-tree"
+import { PathCommitTimes } from "./repo-commit-times"
+import { GitRevisionReads } from "./repo-revision-reads"
 import { assertNoUnrelatedChanges } from "./repo-status"
 import { MemorySecretError, secretPatternClassOf } from "./secret"
 import { scanSecretLikeMaterial } from "../sync/redact"
@@ -43,6 +43,8 @@ export class GitMemoryRepo {
   readonly pathState: GitPathStateStore
   private readonly exec: GitExec
   private readonly hookInstaller: (dir: string) => void | Promise<void>
+  private readonly reads: GitRevisionReads
+  private readonly commitTimes: PathCommitTimes
 
   constructor(options: GitMemoryRepoOptions) {
     this.dir = options.dir
@@ -50,6 +52,15 @@ export class GitMemoryRepo {
     this.exec = options.exec ?? createNodeGitExec()
     this.pathState = new GitPathStateStore(this.dir, this.exec)
     this.hookInstaller = options.installHooks ?? (() => undefined)
+    this.reads = new GitRevisionReads({
+      run: (argv, timeoutMs) => this.git(argv, timeoutMs),
+      result: (argv, stdin) => this.gitResult(argv, stdin),
+    })
+    this.commitTimes = new PathCommitTimes(
+      this.dir,
+      { run: (argv, timeoutMs) => this.git(argv, timeoutMs), result: (argv, stdin) => this.gitResult(argv, stdin) },
+      (revision) => this.reads.lsTree(revision),
+    )
   }
 
   async init(options: InitializeGitRepoOptions = {}): Promise<string> {
@@ -131,37 +142,15 @@ export class GitMemoryRepo {
     return (await this.git(["-c", "core.quotePath=false", "status", "--porcelain", "--untracked-files=all", ...suffix])).stdout
   }
 
-  async head(): Promise<string | null> {
-    const result = await this.gitResult(["rev-parse", "--verify", "HEAD"])
-    if (result.code !== 0) return null
-    return result.stdout.trim() || null
-  }
-
-  async headCommitTimestamp(): Promise<number | null> {
-    const result = await this.gitResult(["show", "-s", "--format=%ct", "HEAD"])
-    if (result.code !== 0) return null
-    const timestamp = Number.parseInt(result.stdout.trim(), 10)
-    return Number.isSafeInteger(timestamp) && timestamp >= 0 ? timestamp : null
-  }
-
-  async lsTree(revision = "HEAD", path?: string): Promise<string[]> {
-    const suffix = path ? ["--", path] : []
-    const result = await this.git(["ls-tree", "-r", "--name-only", "-z", revision, ...suffix])
-    return result.stdout.split("\0").filter(Boolean)
-  }
-
-  async lsTreeSized(revision = "HEAD"): Promise<readonly GitTreeSizedEntry[]> {
-    const result = await this.git(["ls-tree", "-r", "-l", "-z", revision])
-    return parseLsTreeSized(result.stdout)
-  }
-
-  async lsTreeBlobs(revision = "HEAD"): Promise<readonly GitTreeBlobEntry[]> {
-    return parseLsTreeBlobs((await this.git(["ls-tree", "-r", "-z", revision])).stdout)
-  }
-
-    async show(revision: string, path: string): Promise<string> {
-    return (await this.git(["show", `${revision}:${path}`])).stdout
-  }
+  head(): Promise<string | null> { return this.reads.head() }
+  headCommitTimestamp(): Promise<number | null> { return this.reads.headCommitTimestamp() }
+  lsTree(revision = "HEAD", path?: string): Promise<string[]> { return this.reads.lsTree(revision, path) }
+  lsTreeSized(revision = "HEAD"): Promise<readonly GitTreeSizedEntry[]> { return this.reads.lsTreeSized(revision) }
+  lsTreeBlobs(revision = "HEAD"): Promise<readonly GitTreeBlobEntry[]> { return this.reads.lsTreeBlobs(revision) }
+  show(revision: string, path: string): Promise<string> { return this.reads.show(revision, path) }
+  pathCommitTimes(revision: string): Promise<ReadonlyMap<string, number>> { return this.commitTimes.at(revision) }
+  readBlobs(oids: readonly string[]): Promise<ReadonlyMap<string, string>> { return this.reads.readBlobs(oids) }
+  log(options: GitLogOptions = {}): Promise<readonly MemoryCommit[]> { return this.reads.log(options) }
 
   /**
    * Roll index and worktree back to HEAD for the given pathspecs after a refused
@@ -202,42 +191,6 @@ export class GitMemoryRepo {
       const patternClass = secretPatternClassOf(result.stdout)
       if (patternClass !== undefined) throw new MemorySecretError({ path, patternClass, where: "content" })
     }
-  }
-
-  /**
-   * Reads every requested blob through ONE `git cat-file --batch` process. Reading a whole tree with
-   * one `git show` per file spawned thousands of processes per HEAD move on a large memory repo.
-   * Object ids git reports missing are absent from the returned map.
-   */
-  async readBlobs(oids: readonly string[]): Promise<ReadonlyMap<string, string>> {
-    const unique = [...new Set(oids)]
-    if (unique.length === 0) return new Map()
-    const argv = ["cat-file", "--batch"]
-    const result = await this.gitResult(argv, `${unique.join("\n")}\n`)
-    if (result.code !== 0) throw commandError(argv, result)
-    return parseCatFileBatch(result.stdoutBytes ?? Buffer.from(result.stdout, "utf8"))
-  }
-
-  async log(options: GitLogOptions = {}): Promise<readonly MemoryCommit[]> {
-    const argv = ["log", "--format=%x1e%H%x1f%s%x1f%b%x1f%an%x1f%ae%x1f%cI"]
-    // `--fixed-strings` because callers pass trailer literals, `--all-match` because every one of them
-    // must appear in the same commit. Filtering inside git means a caller after one trailer combination
-    // no longer parses the whole history into memory to find it.
-    if (options.grep !== undefined && options.grep.length > 0) {
-      argv.push("--fixed-strings", "--all-match", ...options.grep.map((pattern) => `--grep=${pattern}`))
-    }
-    if (options.limit !== undefined) argv.push("-n", String(options.limit))
-    if (options.since !== undefined) argv.push(`--since=${options.since.toISOString()}`)
-    if (options.range !== undefined) argv.push(options.range)
-    if (options.paths !== undefined && options.paths.length > 0) argv.push("--", ...options.paths)
-    const records = parseLogOutput((await this.git(argv, options.timeoutMs)).stdout)
-    if (options.includePaths !== true) return records
-    return Promise.all(records.map(async (commit) => ({
-      ...commit,
-      paths: parseNulPaths((await this.git([
-        "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", commit.sha,
-      ])).stdout),
-    })))
   }
 
   /** Packs loose objects off the hot path; see `runMemoryRepoMaintenance`. */

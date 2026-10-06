@@ -6,6 +6,8 @@
 
 import { auditMemoryRepo, redactSecretLikeMaterial, type MemoryAuditReport } from "@oh-my-opencode/memory-core"
 import { parseCommandArgs } from "./args"
+import { projectionLimits } from "../projection-limits"
+import { checkProjection } from "./doctor-projection"
 import { estimateSystemTokens } from "./tokens"
 import {
   checkAbandonedRuns,
@@ -96,7 +98,8 @@ export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandConte
   let quarantinedRuns: readonly QuarantinedRun[] = []
 
   if (repository.level === "ok") {
-    const warnTokens = deps.loadSettings().settings.compile_warn_tokens
+    const settings = deps.loadSettings().settings
+    const warnTokens = settings.compile_warn_tokens
     const systemTokens = await estimateSystemTokens(repoDir)
     audit = await auditMemoryRepo(repoDir, { systemTokens, budgetTokens: warnTokens })
     const receiptCheck = await checkReceipts(identity.identityPaths.runtime, deps.now?.() ?? Date.now())
@@ -115,6 +118,8 @@ export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandConte
       await checkReflectionHealth(identity.identityPaths.reflection, { now: deps.now?.() ?? Date.now() }),
       await checkTokens(repoDir, warnTokens, systemTokens),
     )
+    const projection = await checkProjection(repoDir, identity.identity, projectionLimits(settings, identity.identity))
+    if (projection !== undefined) checks.push(projection)
     if (audit.issues.length === 0) {
       checks.push({ name: "audit", level: "ok", detail: "no structural issues" })
     } else {

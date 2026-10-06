@@ -485,6 +485,26 @@ describe("createMemoryPromptHandler", () => {
     expect({ lsTree: repo.lsTreeCalls - afterFirst.lsTree, show: repo.showCalls - afterFirst.show }).toEqual({ lsTree: 0, show: 0 })
   }, 30_000)
 
+  test("#given a configured per-directory limit #when before_agent_start compiles #then the projection shows that many names and counts the rest", async () => {
+    // given
+    const { repo, context } = await fixture()
+    for (const name of ["a", "b", "c"]) await writeFile(join(repo.dir, `note-${name}.md`), `---\ndescription: ${name}\n---\nx\n`)
+    await repo.commitWrite(["note-a.md", "note-b.md", "note-c.md"], "notes", { agentId: IDENTITY, authorName: "t" })
+    const pi = new FakeExtensionAPI()
+    pi.on("before_agent_start", createMemoryPromptHandler({
+      resolveContext: () => context,
+      createRepo: () => repo,
+      resolveProjectionLimits: () => ({ maxEntriesPerDirectory: 1, maxBytes: 0 }),
+    }))
+
+    // when
+    const result = await dispatchEvent(pi, beforeAgentStart("BASE PROMPT"), eventContext("session-1", liveBranch(2)))
+
+    // then
+    const line = result?.systemPrompt?.split("\n").find((candidate) => candidate.startsWith("$MEMORY_DIR/: "))
+    expect(line).toBe("$MEMORY_DIR/: note-a.md (+2 more; read $MEMORY_DIR/ to list)")
+  }, 30_000)
+
   test("#given a prompt already carrying our sentinel block #when the handler runs #then the block is replaced, not duplicated", async () => {
     // given
     const { repo, context } = await fixture()
