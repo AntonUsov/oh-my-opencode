@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { readFile, readdir } from "node:fs/promises"
+import { readFile, readdir } from "../fs/resilient"
 import { join, posix } from "node:path"
 import { FRONTMATTER_RE } from "../memfs/frontmatter-scalar"
 import { describeFrontmatterViolation } from "../memfs/frontmatter-validation"
