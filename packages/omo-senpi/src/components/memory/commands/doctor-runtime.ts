@@ -4,6 +4,9 @@
 // stale locks, orphaned reflection worktrees, and the compile-warn token
 // advisory. Output is read-only and never enters model context.
 
+import { auditMemoryRepo, redactSecretLikeMaterial, type MemoryAuditReport } from "@oh-my-opencode/memory-core"
+import { parseCommandArgs } from "./args"
+import { estimateSystemTokens } from "./tokens"
 import {
   checkAbandonedRuns,
   checkFrontmatter,
@@ -62,7 +65,23 @@ async function checkFacts(
   }
 }
 
-export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandContext): Promise<string> {
+function redactReportStrings(value: unknown): unknown {
+  if (typeof value === "string") return redactSecretLikeMaterial(value)
+  if (Array.isArray(value)) return value.map(redactReportStrings)
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, field]) => [key, redactReportStrings(field)]))
+  }
+  return value
+}
+
+export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandContext, args = ""): Promise<string> {
+  const parsed = parseCommandArgs(args, { booleans: ["json"] })
+  for (const flag of parsed.flags.keys()) {
+    if (flag !== "json") return respond(ctx, `unknown flag --${flag}`, "error")
+  }
+  if (parsed.positionals.length > 0 || (parsed.flags.has("json") && parsed.flags.get("json") !== true)) {
+    return respond(ctx, "usage: /doctor [--json]", "error")
+  }
   const identity = requireIdentity(deps, ctx)
   if (typeof identity === "string") return respond(ctx, identity, "error")
 
@@ -70,24 +89,42 @@ export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandConte
   const repository = checkRepository(identity)
   const checks: DoctorCheck[] = [repository]
   const extra: string[] = []
+  let audit: MemoryAuditReport | null = null
+  let skills = { scanned: 0, repaired: 0 }
 
   if (repository.level === "ok") {
     const warnTokens = deps.loadSettings().settings.compile_warn_tokens
+    const systemTokens = await estimateSystemTokens(repoDir)
+    audit = await auditMemoryRepo(repoDir, { systemTokens, budgetTokens: warnTokens })
     checks.push(
-      ...(await checkFrontmatter(repoDir)),
+      ...(await checkFrontmatter(repoDir, audit)),
       await checkSoulSeed(repoDir),
       await checkLocks(deps, identity.identityPaths.locks),
       await checkWorktrees(deps, identity),
       await checkAbandonedRuns(identity.identityPaths.reflection),
       await checkGhostReservation(identity.identityPaths, deps),
       await checkReflectionHealth(identity.identityPaths.reflection, { now: deps.now?.() ?? Date.now() }),
-      await checkTokens(repoDir, warnTokens),
+      await checkTokens(repoDir, warnTokens, systemTokens),
     )
+    if (audit.issues.length === 0) {
+      checks.push({ name: "audit", level: "ok", detail: "no structural issues" })
+    } else {
+      for (const [code, count] of Object.entries(audit.counts)) {
+        if (code === "frontmatter_invalid" || count === 0) continue
+        const issues = audit.issues.filter((issue) => issue.code === code)
+        checks.push({
+          name: `audit:${code}`,
+          level: code === "file_unreadable" ? "fail" : "warn",
+          detail: `${issues.length} issue${issues.length === 1 ? "" : "s"}: ${issues.map((issue) => `${issue.path} -> ${issue.detail}`).join("; ")}`,
+        })
+      }
+    }
 
     const facts = await checkFacts(deps, identity.identityPaths)
     if (facts !== undefined) checks.push(facts)
 
     const repaired = await repairMissingSkillNameFrontmatter(repoDir)
+    skills = { scanned: repaired.scanned, repaired: repaired.repaired.length }
     const report = formatSkillNameFrontmatterRepairReport(repaired)
     extra.push(
       `[info] skills: scanned ${repaired.scanned} skill file${repaired.scanned === 1 ? "" : "s"}`,
@@ -96,6 +133,10 @@ export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandConte
   }
 
   const level = worstLevel(checks)
+  const notifyLevel = level === "fail" ? "error" : level === "warn" ? "warning" : "info"
+  if (parsed.flags.has("json")) {
+    return respond(ctx, JSON.stringify(redactReportStrings({ identity: identity.identity, level, checks, audit, skills }), null, 2), notifyLevel)
+  }
   const lines = [
     `# Memory doctor: ${identity.identity}`,
     "",
@@ -105,5 +146,5 @@ export async function runDoctor(deps: MemoryCommandDeps, ctx: MemoryCommandConte
   if (level === "fail") lines.push("", "fix the failing checks above, then re-run /doctor")
   else if (level === "warn") lines.push("", "warnings do not block memory; re-run /doctor after addressing them")
 
-  return respond(ctx, lines.join("\n"), level === "fail" ? "error" : level === "warn" ? "warning" : "info")
+  return respond(ctx, redactSecretLikeMaterial(lines.join("\n")), notifyLevel)
 }
