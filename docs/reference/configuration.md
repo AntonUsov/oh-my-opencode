@@ -713,6 +713,43 @@ It runs opportunistically when the session goes idle, and optionally at shutdown
 | `dream.auto_select_max`       | `5`      | Conversations `--auto` may select (1-10)                      |
 | `dream.auto_select_max_chars` | `150000` | Byte budget for auto-selected conversations                   |
 
+#### Memory doctor
+
+In Senpi, `/doctor` checks the working memory corpus and reports `ok`, `warn`, or
+`fail`. Existing checks are `repository`, `frontmatter`, `persona`, `soul-seed`,
+`locks`, `worktrees`, `abandoned-runs`, `reservation`, `reflection-health`,
+`tokens`, and the conditional `facts` advisory. The `skills` lines report the
+existing missing-name frontmatter repair.
+
+The structural audit uses these stable codes:
+
+| Code | Meaning |
+| --- | --- |
+| `link_dangling` | A root-relative wiki link or file-relative Markdown link has no confined target. |
+| `frontmatter_invalid` | A memory file violates the description frontmatter contract. |
+| `content_duplicate` | Multiple Markdown files have identical bodies. |
+| `path_orphan` | A Markdown file is outside the five memory homes and allowed root files. |
+| `file_unreadable` | A Markdown file cannot be read or decoded as UTF-8. |
+| `system_pressure` | The system estimate has reached 80% of `compile_warn_tokens`. |
+
+Frontmatter failures retain the existing `frontmatter` check; other findings
+appear as `audit:<code>`. A clean corpus produces one `audit` success line.
+Unreadable files and invalid frontmatter fail; other structural findings warn.
+The audit is read-only. `/doctor` has no `--fix` flag and rejects unknown flags;
+the existing skill-name repair is its only automatic repair.
+
+`/doctor --json` returns `{ identity, level, checks: [{ name, level, detail }],
+audit: { version: 1, generatedAt, issues: [{ code, path, detail, related? }],
+counts: { <code>: <number> } }, skills: { scanned, repaired } }`. `audit` is
+`null` when the repository is missing. Every string value is secret-screened
+before JSON serialization; numeric counts stay intact.
+
+Dream runs receive the same redacted audit computed over their own worktree at
+`AUDIT_PATH`. They repair moved links, consolidate duplicate bodies with a
+pointer, and move orphaned files into the appropriate home. They leave evidence
+and `system/boundaries.md` untouched and report fixed and unresolved codes.
+Reflection runs do not receive this input.
+
 #### People
 
 Records about individuals, stored as cards with an observation ledger.

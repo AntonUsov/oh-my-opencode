@@ -1,3 +1,13 @@
+## 2026-10-06 - /doctor audits corpus structure and dream repairs it (#9652)
+
+Memory doctor now reports dangling links, invalid frontmatter, duplicate bodies,
+orphaned paths, unreadable files, and system pressure. `/doctor --json` provides
+the checks, audit findings and counts, and skill repair totals, with secret-like
+string values masked before serialization. Unknown flags, including `--fix`,
+are refused. Dream receives a redacted audit of its own worktree and a structural
+repair phase; reflection does not. The repair pipeline preserves user boundaries
+and evidence, validates the child's committed edits, and merges them normally.
+
 ## 2026-10-06 - Adopt senpi 2026.10.10-4
 
 Every `@code-yeongyu/senpi` pin moves from 2026.10.10-3 to 2026.10.10-4: the root devDependency, `omo-native` and its provider map comment, the `omo-senpi` and `senpi-task` peer and dev pins (with their `senpi-tui` and `senpi-ai` aliases), the pin tests and the engine named in `senpi-task`'s coverage test. `test/provider-map-registry.test.ts` passes against the 10-4 engine, so the provider registry lists are unchanged. The engine carries the terminal session controls and delivery sender labels that omo #9662 and #9664 build on, the concurrent-rebind fix (senpi#2828), the stale extension shim repair and the TUI stdout guard. The generated plugin bundles are regenerated for it on Linux.
