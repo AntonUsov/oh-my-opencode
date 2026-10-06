@@ -20,6 +20,7 @@ export type SessionEntryFixture = {
   readonly type: string
   readonly customType?: string
   readonly data?: unknown
+  readonly timestamp?: string
 }
 
 export class MemoryFakeExtensionAPI extends FakeExtensionAPI {

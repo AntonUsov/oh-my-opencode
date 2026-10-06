@@ -8,6 +8,7 @@ import { describeDirtyMarkdownEncodingIssues } from "./porcelain"
 import { GitPathStateStore } from "./path-state"
 import { authorFlags, commandError, normalizePathspecs, normalizeSeedPath } from "./repo-arguments"
 import { parseLogOutput, parseNulPaths } from "./repo-log"
+import { runMemoryRepoMaintenance } from "./repo-maintenance"
 import { parseCatFileBatch, parseLsTreeBlobs, parseLsTreeSized } from "./repo-tree"
 import { assertNoUnrelatedChanges } from "./repo-status"
 import { MemorySecretError, secretPatternClassOf } from "./secret"
@@ -17,6 +18,8 @@ import type {
   GitCommitAuthor,
   GitCommitResult,
   GitLogOptions,
+  GitMaintenanceOptions,
+  GitMaintenanceResult,
   GitMemoryRepoOptions,
   GitMergeOptions,
   GitTreeBlobEntry,
@@ -26,7 +29,7 @@ import type {
 } from "./repo-types"
 
 export type {
-  GitCommitAuthor, GitCommitResult, GitLogOptions, GitMemoryRepoOptions,
+  GitCommitAuthor, GitCommitResult, GitLogOptions, GitMaintenanceOptions, GitMaintenanceResult, GitMemoryRepoOptions,
   GitMergeOptions, GitSeedFile, GitTreeBlobEntry, GitTreeSizedEntry, InitializeGitRepoOptions, MemoryCommit,
 } from "./repo-types"
 
@@ -224,9 +227,10 @@ export class GitMemoryRepo {
       argv.push("--fixed-strings", "--all-match", ...options.grep.map((pattern) => `--grep=${pattern}`))
     }
     if (options.limit !== undefined) argv.push("-n", String(options.limit))
+    if (options.since !== undefined) argv.push(`--since=${options.since.toISOString()}`)
     if (options.range !== undefined) argv.push(options.range)
     if (options.paths !== undefined && options.paths.length > 0) argv.push("--", ...options.paths)
-    const records = parseLogOutput((await this.git(argv)).stdout)
+    const records = parseLogOutput((await this.git(argv, options.timeoutMs)).stdout)
     if (options.includePaths !== true) return records
     return Promise.all(records.map(async (commit) => ({
       ...commit,
@@ -234,6 +238,11 @@ export class GitMemoryRepo {
         "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", commit.sha,
       ])).stdout),
     })))
+  }
+
+  /** Packs loose objects off the hot path; see `runMemoryRepoMaintenance`. */
+  maintain(options: GitMaintenanceOptions): Promise<GitMaintenanceResult> {
+    return runMemoryRepoMaintenance((argv, timeoutMs, signal) => this.git(argv, timeoutMs, signal), options)
   }
 
   async worktreeAdd(path: string, branch: string, startPoint = "HEAD"): Promise<void> {
@@ -308,16 +317,22 @@ export class GitMemoryRepo {
     return head
   }
 
-  private async git(argv: readonly string[]): Promise<GitExecResult> {
-    const result = await this.gitResult(argv)
+  private async git(argv: readonly string[], timeoutMs?: number, signal?: AbortSignal): Promise<GitExecResult> {
+    const result = await this.gitResult(argv, undefined, timeoutMs, signal)
     if (result.code !== 0) throw commandError(argv, result)
     return result
   }
 
-  private gitResult(argv: readonly string[], stdin?: string): Promise<GitExecResult> {
+  private gitResult(
+    argv: readonly string[],
+    stdin?: string,
+    timeoutMs = GIT_TIMEOUT_MS,
+    signal?: AbortSignal,
+  ): Promise<GitExecResult> {
     return this.exec.run(argv, {
       cwd: this.dir,
-      timeoutMs: GIT_TIMEOUT_MS,
+      timeoutMs,
+      ...(signal === undefined ? {} : { signal }),
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
       ...(stdin === undefined ? {} : { stdin }),
     })
