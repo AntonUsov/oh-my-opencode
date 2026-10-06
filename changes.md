@@ -1,4 +1,4 @@
-## 2026-10-05 - Install guide lists the community AUR package (#9584)
+## 2026-10-06 - Install guide lists the community AUR package (#9584)
 
 `docs/guide/install.md` gains an "Arch Linux: community AUR package" section for `omo-bin`, a package maintained by @sTiKyt outside the OmO team. The section says what it installs (our official release binary for its version, checked against that release's `SHA256SUMS`, as `/usr/bin/omo`), and to update it with the AUR helper, because `omo update` and the install command don't recognize a pacman install yet (#9585). It also says the package can trail the `latest` channel.
 
