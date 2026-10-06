@@ -4,6 +4,8 @@ import { closeSync, openSync, writeSync } from "@oh-my-opencode/memory-core/fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { maybeKillAt } from "@oh-my-opencode/memory-core"
+
 import {
   readRunJson,
   unlinkRunArtifact,
@@ -184,6 +186,7 @@ async function runSupervisor(runDir: string): Promise<void> {
   childPid = undefined
   closeSync(stdoutFd)
   closeSync(stderrFd)
+  maybeKillAt("after-child-exit")
 
   // Record the timeout from whether the deadline instant was actually reached, not from which
   // process's deadline callback happened to run first: the bootstrap's own enforcement can end

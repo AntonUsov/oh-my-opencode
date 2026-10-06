@@ -26,6 +26,9 @@ import type {
   ReflectionSpawnArgs,
 } from "./spawn-types"
 
+/** Prefix of the error the launcher sees when the supervisor exits without a complete outcome. */
+export const SUPERVISOR_EXIT_PREFIX = "memory run supervisor exited with"
+
 const DEFAULT_GRACE_MS = 5_000
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024
 // Publication can still be waiting for the terminal gate after the child deadline expires.
@@ -215,7 +218,7 @@ async function runSupervisedChild(input: {
   })
   if (result.kind === "error" && !hasCompleteOutcome()) throw result.error
   if (result.kind === "close" && !hasCompleteOutcome()) {
-    throw new Error(`memory run supervisor exited with ${result.exit.code ?? result.exit.signal ?? "unknown status"}`)
+    throw new Error(`${SUPERVISOR_EXIT_PREFIX} ${result.exit.code ?? result.exit.signal ?? "unknown status"}`)
   }
   if (result.kind === "outcome" && result.result === "timeout") {
     throw new Error("memory run supervisor did not publish an outcome before its deadline")

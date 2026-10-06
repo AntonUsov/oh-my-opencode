@@ -28,6 +28,8 @@ if (mode === "commit") {
   )
   await git(worktree, ["add", "system/reflected.md"])
   await git(worktree, ["commit", "-m", "chore(reflection): add stub memory"])
+} else if (mode === "noop") {
+  process.exitCode = 0
 } else if (mode === "admin") {
   await appendFile(join(worktree, ".git"), "# reflection stub touched git administration\n")
 } else if (mode === "timeout") {

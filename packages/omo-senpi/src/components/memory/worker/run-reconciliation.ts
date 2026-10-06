@@ -125,7 +125,7 @@ async function reconcileRun(
 ): Promise<ReflectionRunReconcileResult | undefined> {
   const outcomePath = join(runDir, "outcome.json")
   if (await hasMatchingOutcome(outcomePath, ledger)) {
-    return await finalizeRecordedOutcome(context, runDir, ledger)
+    return await finalizeRecordedOutcome(context, runDir, ledger, { recovered: true })
   }
   if (ledger.launching === true && context.now() <= ledger.hardDeadlineAt) return undefined
   const supervisor = await classifyRunProcess(ledger.pid, ledger.processStart, context)
@@ -134,7 +134,7 @@ async function reconcileRun(
     await wait(outcomePath, ledger.deadlineAt)
     const refreshed = parseReservationRunLedger(await readRunJson<unknown>(join(runDir, "ledger.json")))
     if (await hasMatchingOutcome(outcomePath, refreshed)) {
-      return await finalizeRecordedOutcome(context, runDir, refreshed)
+      return await finalizeRecordedOutcome(context, runDir, refreshed, { recovered: true })
     }
     if (refreshed.launching === true && context.now() <= refreshed.hardDeadlineAt) return undefined
     const freshSupervisor = await classifyRunProcess(refreshed.pid, refreshed.processStart, context)
@@ -155,6 +155,8 @@ async function hasMatchingOutcome(
   return runOutcomeMatchesLedger(ledger, outcome)
 }
 
+// The child exited on its own after the supervisor died, so a tip it committed may be complete.
+const RECOVER_TIP = { recoverWorktreeTip: true } as const
 const SUPERVISOR_DIED_DETAIL = "reflection supervisor died before publishing an outcome"
 const CHILD_KILLED_AFTER_DEADLINE_DETAIL = "reflection child outlived its deadline after the supervisor died and was killed"
 
@@ -166,12 +168,12 @@ async function reconcileDeadSupervisor(
   let child = await classifyRunProcess(ledger.childPid, ledger.childProcessStart, context)
   if (child === "unknown") return await abandonReservationRun(context, runDir, ledger)
   if (child === "dead" || child === "absent") {
-    return await failReservationRun(context, runDir, ledger, "failed", deadRunDetail(ledger, child))
+    return await failReservationRun(context, runDir, ledger, "failed", deadRunDetail(ledger, child), RECOVER_TIP)
   }
   const wait = context.waitUntil ?? ((deadlineAt) => waitForTime(deadlineAt, context.now))
   await wait(ledger.hardDeadlineAt)
   child = await classifyRunProcess(ledger.childPid, ledger.childProcessStart, context)
-  if (child === "dead") return await failReservationRun(context, runDir, ledger, "failed", deadRunDetail(ledger, child))
+  if (child === "dead") return await failReservationRun(context, runDir, ledger, "failed", deadRunDetail(ledger, child), RECOVER_TIP)
   if (child === "unknown") return await abandonReservationRun(context, runDir, ledger)
   const signal = context.signalProcessGroup ?? signalRecordedProcessGroup
   if (ledger.childPid !== undefined) signal(ledger.childPid, "SIGTERM")

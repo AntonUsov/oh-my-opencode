@@ -42,6 +42,8 @@ export interface RunOutcome {
     readonly signal: string | null
   }
   readonly timedOut: boolean
+  /** Published by recovery from a validated worktree tip, not by a supervisor that saw the child exit. */
+  readonly recoveredFromWorktree?: true
 }
 
 export function runOutcomeMatchesLedger(

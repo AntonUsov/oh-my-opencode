@@ -1,5 +1,5 @@
 import { existsSync } from "@oh-my-opencode/memory-core/fs"
-import { readdir, rm, stat } from "@oh-my-opencode/memory-core/fs"
+import { mkdir, readdir, stat } from "@oh-my-opencode/memory-core/fs"
 import { join } from "node:path"
 
 import {
@@ -12,7 +12,7 @@ import {
 } from "@oh-my-opencode/memory-core"
 
 import { emitMemoryReceipt, runReceipt, type RunReceiptLedger } from "../receipts-port"
-import { parseRunPrelaunchArtifact, readRunJson } from "./run-artifacts"
+import { parseRunPrelaunchArtifact, readRunJson, writeRunJsonAtomic } from "./run-artifacts"
 import { classifyGhostActive } from "./run-ghost-active"
 import { isLauncherDead } from "./run-liveness"
 import type { ReconcileContext, ReflectionRunReconcileResult } from "./run-reconciliation"
@@ -81,18 +81,42 @@ export async function reconcilePrelaunch(context: ReconcileContext): Promise<Pre
     return retiredGeneration ? { retiredRunId: active.runId } : {}
   }
   // Retired artifacts are historical evidence, not resources owned by this reservation.
-  if (!retiredGeneration && existsSync(prelaunchPath)) {
+  if (retiredGeneration) return { result: await releaseReservationAsFailed(context, active.runId), retiredRunId: active.runId }
+  if (existsSync(prelaunchPath)) {
     const prelaunch = parseRunPrelaunchArtifact(await readRunJson<unknown>(prelaunchPath))
     if (prelaunch.runId !== active.runId) throw new Error("Reflection prelaunch run id does not match reservation")
     const repo = new GitMemoryRepo({ dir: context.identity.paths.repo, agentId: context.identity.id })
     const cleanup = await discardReflectionWorktree(repo, prelaunch.worktreeDir, prelaunch.worktreeBranch)
     if (!cleanup.worktreeRemoved || !cleanup.branchRemoved) return {}
-    await rm(runDir, { recursive: true, force: true })
   }
-  return {
-    result: await releaseReservationAsFailed(context, active.runId),
-    ...(retiredGeneration ? { retiredRunId: active.runId } : {}),
-  }
+  await recordInterruptedLaunch(context, runDir, active)
+  return { result: await releaseReservationAsFailed(context, active.runId) }
+}
+
+/**
+ * The launcher died before the run had a ledger. The run dir keeps whatever it already holds, and a
+ * pre-ledger `abandoned.json` carrying every identity field a receipt needs (copied from the still-held
+ * reservation, since run ids are opaque) is made durable before the reservation is released.
+ */
+async function recordInterruptedLaunch(context: ReconcileContext, runDir: string, active: ReservedRun): Promise<void> {
+  const generation = active.reservedAt
+  if (generation === undefined) throw new Error(`No durable generation for interrupted launch ${active.runId}`)
+  const kind = active.request.trigger === "dream" ? "dream" : "reflection"
+  const origin = active.request.origin
+  await mkdir(runDir, { recursive: true, mode: 0o700 })
+  await writeRunJsonAtomic(join(runDir, "abandoned.json"), {
+    version: 1,
+    runId: active.runId,
+    abandonedAt: new Date(context.now()).toISOString(),
+    reason: "launch_interrupted",
+    generation,
+    kind,
+    trigger: active.request.trigger,
+    ...(origin === undefined ? {} : { origin }),
+    launcher: { pid: active.launcherPid, hostname: active.launcherHostname, processStart: active.launcherProcessStart ?? null },
+  })
+  const run: RunReceiptLedger = { kind, runId: active.runId, trigger: active.request.trigger, ...(origin === undefined ? {} : { origin }), startedAt: generation }
+  await emitMemoryReceipt(context.identity.paths.runtime, runReceipt(run, "abandoned", { reason: "launch_interrupted" }), context.receipts, context.warn)
 }
 
 /** Only a launcher proven dead on this host lets a run be quarantined; anything less keeps deferring. */

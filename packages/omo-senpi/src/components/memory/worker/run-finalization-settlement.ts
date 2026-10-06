@@ -1,5 +1,7 @@
 import { join } from "node:path"
 
+import { maybeKillAt } from "@oh-my-opencode/memory-core"
+
 import { emitMemoryReceipt, runOutcomeReceipt } from "../receipts-port"
 import {
   ensureReflectionCompletion,
@@ -100,7 +102,9 @@ export async function settleReservationRun(
     generation: current.startedAt,
     ...(decision.integrationSha === undefined ? {} : { integrationSha: decision.integrationSha }),
     ...(decision.reason === undefined ? {} : { reason: decision.reason }),
+    ...(decision.recoveredFromWorktree === true ? { recoveredFromWorktree: true } : {}),
   })
+  maybeKillAt("before-receipt")
   await emitMemoryReceipt(context.identity.paths.runtime, runOutcomeReceipt(current, decision.outcome, decision), context.receipts, context.warn)
   return {
     runId: current.runId,

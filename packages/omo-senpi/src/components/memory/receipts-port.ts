@@ -1,6 +1,5 @@
 import {
   appendMemoryReceiptOnce,
-  maybeKillAt,
   type MemoryReceiptEvent,
   type MemoryReceiptInput,
   type ReflectionOutcome,
@@ -38,7 +37,6 @@ export async function emitMemoryReceipt(
   port: MemoryReceiptsPort = DEFAULT_RECEIPTS_PORT,
   warn?: ReceiptWarn,
 ): Promise<void> {
-  maybeKillAt("before-receipt")
   try {
     await port.append(runtimeDir, input)
   } catch (error) {
