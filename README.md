@@ -123,7 +123,7 @@ Anonymous telemetry is enabled by default to track active installations (DAU/WAU
 We're past the era of reading docs. Just paste this into your agent:
 
 ```
-Read this and tell me why it's not just another boilerplate: https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/refs/heads/dev/README.md
+Read this and tell me why it's not just another boilerplate: https://raw.githubusercontent.com/AntonUsov/oh-my-opencode/refs/heads/dev/README.md
 ```
 
 
