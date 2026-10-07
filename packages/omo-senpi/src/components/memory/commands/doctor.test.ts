@@ -592,6 +592,42 @@ describe("doctor receipts and quarantined runs", () => {
     expect(text).toContain("[warn] receipts: dream never; reflection never; facts committed 1h ago (batch batch-00) (1 partial line skipped)")
   })
 
+  test("#given receipts, a quarantined run and projection omissions together #when doctor runs with --json #then one parsed report carries all three", async () => {
+    // given
+    const { identity, pi, ctx } = await harness({
+      seeded: false,
+      deps: {
+        now: () => NOW_MS,
+        loadSettings: () => ({
+          settings: memorySettings({ projection: { max_entries_per_directory: 1, max_bytes: 0 } }),
+          configPath: "/tmp/omo.jsonc",
+        }),
+      },
+    })
+    await seededRepo(identity, [
+      ...SEEDS,
+      { relativePath: "reference/a.md", content: "---\ndescription: A\n---\na\n" },
+      { relativePath: "reference/b.md", content: "---\ndescription: B\n---\nb\n" },
+    ])
+    await writeReceipts(identity.identityPaths.runtime, [
+      { at: at(HOUR_MS), kind: "reflection", runId: "reflection-run-1", trigger: "step-count", event: "merged", generation: at(2 * HOUR_MS), sha: "abc" },
+    ])
+    const runDir = join(identity.identityPaths.reflection, "runs", "run-quarantined")
+    await mkdir(runDir, { recursive: true })
+    await writeFile(join(runDir, "quarantined.json"), JSON.stringify({
+      version: 1, runId: "run-quarantined", kind: "reflection", trigger: "step-count", generation: at(3 * HOUR_MS),
+      reason: "ledger_unreadable", quarantinedAt: at(2 * HOUR_MS), evidence: ["ledger.json"],
+    }))
+
+    // when
+    const report = JSON.parse(await invoke(pi, "doctor", "--json", ctx))
+
+    // then
+    expect(report.receipts.reflection).toMatchObject({ event: "merged", runId: "reflection-run-1" })
+    expect(report.quarantinedRuns).toEqual([expect.objectContaining({ runId: "run-quarantined", reason: "ledger_unreadable" })])
+    expect(report.checks).toContainEqual(expect.objectContaining({ name: "projection", level: "warn", detail: expect.stringMatching(/1 omitted/) }))
+  })
+
   test("#given a launch the reconciler recorded as interrupted #when doctor runs #then it is not a run needing manual disposal", async () => {
     // given
     const { identity, pi, ctx } = await harness({ deps: { now: () => NOW_MS } })
