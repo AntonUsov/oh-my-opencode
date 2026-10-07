@@ -49,12 +49,12 @@
   "license": "SUL-1.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/code-yeongyu/oh-my-openagent.git"
+    "url": "git+https://github.com/AntonUsov/oh-my-opencode.git"
   },
   "bugs": {
-    "url": "https://github.com/code-yeongyu/oh-my-openagent/issues"
+    "url": "https://github.com/AntonUsov/oh-my-opencode/issues"
   },
-  "homepage": "https://github.com/code-yeongyu/oh-my-openagent#readme",
+  "homepage": "https://github.com/AntonUsov/oh-my-opencode#readme",
   "dependencies": {
     "@ast-grep/cli": "^0.41.1",
     "@ast-grep/napi": "^0.41.1",
