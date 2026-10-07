@@ -46,6 +46,20 @@ export interface RunOutcome {
   readonly recoveredFromWorktree?: true
 }
 
+export const CHILD_EXIT_FILENAME = "child-exit.json"
+
+/** Written by the child bootstrap the moment the model child exits, before it reports to the supervisor. */
+export interface RunChildExit {
+  readonly version: 1
+  readonly runId: string
+  readonly attempt: number
+  readonly code: number | null
+  readonly signal: string | null
+  readonly finishedAt: string
+  /** The bootstrap's clock had reached the hard deadline, so its own enforcement may have ended the child. */
+  readonly timedOut: boolean
+}
+
 export function runOutcomeMatchesLedger(
   ledger: { readonly attempt?: number },
   outcome: RunOutcome,

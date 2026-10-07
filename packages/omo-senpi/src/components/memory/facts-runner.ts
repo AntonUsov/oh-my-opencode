@@ -195,6 +195,7 @@ export class FactsExtractorRunner {
         deadlineMs,
         terminationGraceMs: this.options.terminationGraceMs,
         receiptsDir: this.options.identity.paths.runtime,
+        warn: (message, fields) => this.options.logger?.warn(message, fields),
       })
     } catch (error) {
       await this.queue.releaseClaim(batch, claimId)
@@ -279,6 +280,7 @@ export class FactsExtractorRunner {
       }),
       abandon: (runDir, ledger, reason) => this.terminal.abandon(runDir, ledger, reason),
       warn: (message, fields) => this.options.logger?.warn(message, fields),
+      receiptsDir: this.options.identity.paths.runtime,
     })
     await this.prune()
     return active

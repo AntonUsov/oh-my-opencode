@@ -1,7 +1,7 @@
 // Crash-recovery driver: every path that can reach a kill point runs here, in a child the e2e test
 // starts with an explicit environment, never in the test process.
 //
-//   --root <dir> --run [--dream] [--child commit|noop] [--kill-self-after-supervisor-exit]
+//   --root <dir> --run [--dream] [--child commit|noop|commit-fail|commit-hang] [--deadline-ms <n>] [--kill-self-after-supervisor-exit]
 //   --root <dir> --reconcile [--fail-receipt <event>] [--now-offset-ms <n>]
 
 import { join } from "node:path"
@@ -29,6 +29,11 @@ const value = (name: string) => {
 const root = value("--root")
 if (root === undefined) throw new Error("--root is required")
 const report = (line: string) => { process.stdout.write(`${line}\n`) }
+const childMode = (mode: string | undefined) => {
+  if (mode === undefined) return "commit" as const
+  if (mode === "noop" || mode === "commit-fail" || mode === "commit-hang") return mode
+  throw new Error(`unknown --child mode ${mode}`)
+}
 
 if (flag("--run")) {
   const killSelf = flag("--kill-self-after-supervisor-exit")
@@ -47,7 +52,8 @@ if (flag("--run")) {
   const harness = await createRunnerHarness({
     root,
     dream: flag("--dream"),
-    childMode: value("--child") === "noop" ? "noop" : "commit",
+    childMode: childMode(value("--child")),
+    ...(value("--deadline-ms") === undefined ? {} : { deadlineMs: Number(value("--deadline-ms")) }),
     resolveAndPreflightLaunch: observed,
   })
   report(`reserved: ${harness.run.runId}`)

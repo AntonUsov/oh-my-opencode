@@ -10,7 +10,7 @@ import {
   type RunLaunchManifest,
   type RunOutcome,
 } from "./run-artifacts"
-import { emitMemoryReceipt, runReceipt, type RunReceiptLedger } from "../receipts-port"
+import { emitMemoryReceipt, runReceipt, type ReceiptWarn, type RunReceiptLedger } from "../receipts-port"
 import { requireRunMetadata } from "./spawn-metadata"
 import { describeReflectionLauncher } from "./launcher-identity"
 import { waitForRunCompletion } from "./run-sentinel"
@@ -44,6 +44,7 @@ export async function runReflectionChild(
     readonly supervisorPath?: string
     readonly now?: () => number
     readonly receiptsDir?: string
+    readonly receiptWarn?: ReceiptWarn
   },
 ): Promise<ReflectionChildResult> {
   const graceMs = options.terminationGraceMs ?? DEFAULT_GRACE_MS
@@ -73,6 +74,7 @@ export async function runReflectionChild(
     maxOutputBytes,
     supervisorPath: options.supervisorPath,
     ...(options.receiptsDir === undefined ? {} : { receiptsDir: options.receiptsDir }),
+    ...(options.receiptWarn === undefined ? {} : { receiptWarn: options.receiptWarn }),
     ledger: {
       version: 1,
       runId: metadata.runId,
@@ -126,6 +128,7 @@ async function runSupervisedChild(input: {
   readonly supervisorPath?: string
   readonly ledger: Readonly<Record<string, unknown>>
   readonly receiptsDir?: string
+  readonly receiptWarn?: ReceiptWarn
 }): Promise<ReflectionChildResult> {
   await mkdir(input.runDir, { recursive: true, mode: 0o700 })
   const stdoutPath = join(input.runDir, "child-stdout.log")
@@ -168,7 +171,7 @@ async function runSupervisedChild(input: {
   })
   supervisor.unref()
   if (input.receiptsDir !== undefined && input.attempt === 1) {
-    await emitMemoryReceipt(input.receiptsDir, runReceipt(launchedRun(input.ledger), "launched"))
+    await emitMemoryReceipt(input.receiptsDir, runReceipt(launchedRun(input.ledger), "launched"), undefined, input.receiptWarn)
   }
   const outcomePath = join(input.runDir, "outcome.json")
   const launchPath = join(input.runDir, "launch.json")

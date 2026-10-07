@@ -14,7 +14,7 @@ import {
 import { emitMemoryReceipt, runReceipt, type RunReceiptLedger } from "../receipts-port"
 import { parseRunPrelaunchArtifact, readRunJson, writeRunJsonAtomic } from "./run-artifacts"
 import { classifyGhostActive } from "./run-ghost-active"
-import { isLauncherDead } from "./run-liveness"
+import { classifyRunProcess, isLauncherDead } from "./run-liveness"
 import type { ReconcileContext, ReflectionRunReconcileResult } from "./run-reconciliation"
 import { parseReservationRunLedger, type ReservationRunLedger } from "./reservation-run-ledger"
 
@@ -48,7 +48,8 @@ export async function reconcilePrelaunch(context: ReconcileContext): Promise<Pre
     if (ledger === undefined) {
       // A run that already finished keeps its terminal artifact as the record; only a run with no
       // terminal state is stuck because of the unreadable ledger.
-      if (await terminalTimestamp(terminalPath, hasFinal) !== undefined) return {}
+      if (existsSync(terminalPath)) return releaseFinishedUnderDeadLauncher(context, active)
+      if (!(await recordedProcessesDead(context, runDir))) return {}
       return quarantineUnderDeadLauncher(context, active, runDir, "ledger_unreadable")
     }
     if (!existsSync(terminalPath)) {
@@ -61,7 +62,7 @@ export async function reconcilePrelaunch(context: ReconcileContext): Promise<Pre
       const finalizedAt = ledger.finalizedAt === undefined ? undefined : Date.parse(ledger.finalizedAt)
       if (![terminalAt, reservedAt, startedAt].every(Number.isFinite)
         || (finalizedAt !== undefined && !Number.isFinite(finalizedAt))) {
-        return quarantineUnderDeadLauncher(context, active, runDir, "invalid_generation_timestamps", ledger)
+        return releaseFinishedUnderDeadLauncher(context, active)
       }
       retiredGeneration = startedAt < reservedAt && terminalAt < reservedAt
         && (finalizedAt === undefined || finalizedAt < reservedAt)
@@ -117,6 +118,39 @@ async function recordInterruptedLaunch(context: ReconcileContext, runDir: string
   })
   const run: RunReceiptLedger = { kind, runId: active.runId, trigger: active.request.trigger, ...(origin === undefined ? {} : { origin }), startedAt: generation }
   await emitMemoryReceipt(context.identity.paths.runtime, runReceipt(run, "abandoned", { reason: "launch_interrupted" }), context.receipts, context.warn)
+}
+
+/**
+ * A finished run whose timestamps cannot attribute it to this reservation still has its terminal
+ * artifact as its one recorded outcome. Under a dead launcher the reservation is released without
+ * touching the run dir, so a later backfill sees exactly one terminal state.
+ */
+async function releaseFinishedUnderDeadLauncher(context: ReconcileContext, active: ReservedRun): Promise<PrelaunchReconcile> {
+  if (active.launcherPid === undefined || active.launcherHostname !== context.hostname()) return {}
+  if (!(await isLauncherDead(active.launcherPid, active.launcherProcessStart, context))) return {}
+  return { result: await releaseReservationAsFailed(context, active.runId), retiredRunId: active.runId }
+}
+
+/**
+ * The launcher exits while its detached supervisor keeps running, so an unreadable ledger (for
+ * example one a newer writer produced) proves nothing about the run. Its recorded supervisor and
+ * child are read leniently and must both be dead or absent before the run may be quarantined.
+ */
+async function recordedProcessesDead(context: ReconcileContext, runDir: string): Promise<boolean> {
+  let raw: Record<string, unknown>
+  try {
+    const value = await readRunJson<unknown>(join(runDir, "ledger.json"))
+    raw = typeof value === "object" && value !== null ? value as Record<string, unknown> : {}
+  } catch {
+    raw = {}
+  }
+  const pid = (key: string) => typeof raw[key] === "number" ? raw[key] as number : undefined
+  const start = (key: string) => typeof raw[key] === "string" || raw[key] === null ? raw[key] as string | null : undefined
+  for (const [pidKey, startKey] of [["pid", "processStart"], ["childPid", "childProcessStart"]] as const) {
+    const verdict = await classifyRunProcess(pid(pidKey), start(startKey), context)
+    if (verdict !== "dead" && verdict !== "absent") return false
+  }
+  return true
 }
 
 /** Only a launcher proven dead on this host lets a run be quarantined; anything less keeps deferring. */

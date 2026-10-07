@@ -5,11 +5,13 @@ import { validateCompletion } from "@oh-my-opencode/memory-core"
 
 import { emitMemoryReceipt, runReceipt } from "../receipts-port"
 import {
+  CHILD_EXIT_FILENAME,
   readRunJson,
   readRunTextTail,
   runOutcomeMatchesLedger,
   updateRunLedger,
   writeRunJsonAtomic,
+  type RunChildExit,
   type RunOutcome,
 } from "./run-artifacts"
 import {
@@ -56,11 +58,11 @@ export async function finalizeRecordedOutcome(
 }
 
 /**
- * A supervisor that died after its child exited never published `outcome.json`, though the child's
- * committed tip may be complete. When that tip passes the same validation a successful child's tip
- * passes, the outcome is published as a success marked `recoveredFromWorktree`, so the normal
- * validate, merge and settle path takes it. Returns false, writing nothing, for an absent or
- * invalid tip.
+ * A supervisor that died after its child exited never published `outcome.json`. Recovery trusts the
+ * child's tip only when the bootstrap durably recorded that this attempt's child exited 0, by
+ * itself, before the hard deadline, and the tip passes the same validation a successful child's tip
+ * passes. The outcome then carries that recorded exit, marked `recoveredFromWorktree`, so the normal
+ * validate, merge and settle path takes it. Anything less returns false and writes nothing.
  */
 export async function recoverUnpublishedWorktreeTip(
   context: RunFinalizationContext,
@@ -68,6 +70,8 @@ export async function recoverUnpublishedWorktreeTip(
   ledger: ReservationRunLedger,
 ): Promise<boolean> {
   if (existsSync(join(runDir, "outcome.json"))) return false
+  const exit = await readCleanChildExit(runDir, ledger)
+  if (exit === undefined) return false
   const worktree = worktreeFromLedger(context.identity, ledger)
   if (!existsSync(worktree.dir)) return false
   const validation = await validateCompletion(worktree, ledger.baseSha, worktree.exec)
@@ -76,14 +80,28 @@ export async function recoverUnpublishedWorktreeTip(
     version: 1,
     runId: ledger.runId,
     ...(ledger.attempt === undefined ? {} : { attempt: ledger.attempt }),
-    finishedAt: new Date(context.now()).toISOString(),
-    childExit: { code: 0, signal: null },
+    finishedAt: exit.finishedAt,
+    childExit: { code: exit.code, signal: exit.signal },
     timedOut: false,
     recoveredFromWorktree: true,
   }
   await writeRunJsonAtomic(join(runDir, "outcome.json"), outcome)
   await emitRecovered(context, ledger)
   return true
+}
+
+async function readCleanChildExit(runDir: string, ledger: ReservationRunLedger): Promise<RunChildExit | undefined> {
+  let exit: RunChildExit
+  try {
+    exit = await readRunJson<RunChildExit>(join(runDir, CHILD_EXIT_FILENAME))
+  } catch {
+    return undefined
+  }
+  const finishedAt = Date.parse(exit.finishedAt)
+  const clean = exit.runId === ledger.runId && exit.attempt === ledger.attempt
+    && exit.code === 0 && exit.signal === null && exit.timedOut === false
+    && Number.isFinite(finishedAt) && finishedAt < ledger.hardDeadlineAt
+  return clean ? exit : undefined
 }
 
 async function emitRecovered(context: RunFinalizationContext, ledger: ReservationRunLedger): Promise<void> {

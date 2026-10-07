@@ -99,7 +99,7 @@ async function reserveDream(store: ReflectionReservationStore, journal: Transcri
 export async function createRunnerHarness(options: {
   readonly childMode:
     | "commit" | "timeout" | "admin" | "model-fallback" | "model-exhausted" | "provider-cooldown"
-    | "extension-provider" | "extension-provider-unreachable" | "noop"
+    | "extension-provider" | "extension-provider-unreachable" | "noop" | "commit-fail" | "commit-hang"
   /** Builds the identity under this directory instead of a fresh temp dir. */
   readonly root?: string
   /** Reserves a dream run (origin `idle`) instead of a step-count reflection. */

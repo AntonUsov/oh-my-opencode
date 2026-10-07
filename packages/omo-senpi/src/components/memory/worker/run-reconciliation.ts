@@ -105,7 +105,9 @@ async function reconcileRunOrQuarantine(
     return await reconcileRun(context, runDir, ledger)
   } catch (error) {
     if (!(error instanceof RunTerminalClaimUnrecoverableError)) throw error
-    const active = (await context.reservation.readState()).active
+    const active = (await context.reservation.readState(
+      context.deferOnSchedulerContention ? { waitTimeoutMs: 0 } : undefined,
+    )).active
     return quarantineRun(context, runDir, ledger.runId, "terminal_claim_unrecoverable", ledger, active?.runId === ledger.runId ? active : undefined)
   }
 }

@@ -39,7 +39,8 @@ async function terminalReceipt(runDir: string): Promise<MemoryReceiptInput | und
   if (existsSync(join(runDir, "final.json"))) {
     const final = await readSentinel(join(runDir, "final.json"))
     if (ledger === undefined || typeof final?.outcome !== "string" || !OUTCOMES.has(final.outcome)) return undefined
-    return runOutcomeReceipt(ledger, final.outcome as ReflectionOutcome, {
+    const settled = typeof final.generation === "string" ? { ...ledger, startedAt: final.generation } : ledger
+    return runOutcomeReceipt(settled, final.outcome as ReflectionOutcome, {
       ...(typeof final.integrationSha === "string" ? { integrationSha: final.integrationSha } : {}),
       ...(typeof final.reason === "string" ? { reason: final.reason } : {}),
     })

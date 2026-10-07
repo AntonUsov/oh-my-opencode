@@ -336,7 +336,7 @@ describe("reflection and dream run reconciliation", () => {
   test.each([
     ["final", undefined], ["final", "invalid"], ["final", 123], ["final", null],
     ["abandoned", undefined], ["abandoned", "invalid"], ["abandoned", 123], ["abandoned", null],
-  ] as const)("#given %s has invalid terminal timestamp %s #when reconciled #then the run is quarantined with its artifact untouched and the queue moves on", async (terminal, timestamp) => {
+  ] as const)("#given %s has invalid terminal timestamp %s #when reconciled #then the reservation is released, the finished run is not quarantined and its artifact is untouched", async (terminal, timestamp) => {
     const item = await fixture()
     await retireRunGeneration(item, "2026-08-09T00:00:00.000Z", terminal)
     const path = join(item.runDir, `${terminal}.json`)
@@ -359,7 +359,7 @@ describe("reflection and dream run reconciliation", () => {
     })
 
     expect(results).toEqual([{ runId: "run-orphan", outcome: "failed" }])
-    expect(JSON.parse(await readFile(join(item.runDir, "quarantined.json"), "utf8")).reason).toBe("invalid_generation_timestamps")
+    expect(existsSync(join(item.runDir, "quarantined.json"))).toBe(false)
     expect(await readFile(path, "utf8")).toBe(terminalBefore)
     expect(launched).toEqual(["run-pending"])
   }, 30_000)

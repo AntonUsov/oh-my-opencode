@@ -748,22 +748,30 @@ runtime directory, an append-only record outside the memory repository. Each
 line is one lifecycle event: `launched`, `recovered`, `merged`, `no_changes`,
 `failed`, `abandoned` and `quarantined` for reflection and dream runs, and
 `committed`, `no_facts`, `failed` and `parked` for facts batches. A receipt is
-written after the run's own terminal file, and a lost receipt is rebuilt from
-that file at the next startup, so each outcome is recorded exactly once. The
+written after the run's own terminal file, and a lost reflection or dream
+receipt is rebuilt from that file at the next startup, so each run outcome is
+recorded exactly once. The
 check warns when the file ends in a partial line.
 
-`quarantined-runs` lists runs that startup reconciliation could neither finish
-nor release: invalid terminal timestamps, an unreadable ledger, a run directory
-that never got a prelaunch record, or a terminal claim that cannot be read.
-Reconciliation quarantines such a run only after its launcher is proven dead on
-this machine. It writes `quarantined.json` with the reason and keeps every file
-in the run directory. It saves the held reservation as
+`quarantined-runs` lists unfinished runs that startup reconciliation could
+neither finish nor release: an unreadable ledger, a run directory that never
+got a prelaunch record, or a terminal claim that cannot be read. The first two
+are quarantined only after the launcher is proven dead on this machine and, for
+an unreadable ledger, its recorded supervisor and child too. An unreadable
+terminal claim is quarantined where reconciliation would otherwise have
+abandoned or failed the run. A finished run is never quarantined: when its
+timestamps cannot be attributed, its terminal file stays its one recorded
+outcome and the reservation is released. Quarantine writes `quarantined.json`
+with the reason and keeps every file in the run directory. It saves the held reservation as
 `reservation.quarantined.json` and releases it, so later runs proceed.
 Inspect and remove a quarantined directory by hand; `/doctor` never deletes it.
 
-When a run's supervisor dies after the model already committed a complete
-result, startup recovers that result: it is validated and merged like a normal
-run, and the receipts show `recovered` before `merged`. A launch interrupted
+When a run's supervisor dies after the model child already exited cleanly
+before its deadline (recorded in the run's `child-exit.json`), with a complete
+committed result, startup recovers that result: it is validated and merged like a normal
+run, and the receipts show `recovered` before `merged`. `recovered` marks any run
+that startup reconciliation settled after the process that ran it died, so it
+precedes whatever outcome that run reaches, including `failed`. A launch interrupted
 before its run started is recorded as `abandoned` with reason
 `launch_interrupted`; its worktree is already removed, so `abandoned-runs` does
 not list it.

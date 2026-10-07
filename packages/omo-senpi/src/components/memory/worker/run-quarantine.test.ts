@@ -45,27 +45,56 @@ async function receipts(item: Item) {
 }
 
 describe("quarantine of runs reconciliation cannot recover", () => {
-  test("#given corrupt terminal timestamps under a dead launcher #when reconciled #then the run is quarantined with its evidence and the reservation moves on", async () => {
+  test("#given a finished run with corrupt terminal timestamps under a dead launcher #when reconciled twice #then it is released, never quarantined, and has one terminal receipt", async () => {
     // given
     const item = await fixture()
     await writeRunJsonAtomic(join(item.runDir, "final.json"), { version: 1, runId: item.ledger.runId, outcome: "merged", finishedAt: "not-a-date" })
     await queuePendingReservation(item)
-    const activeBefore = JSON.parse(await readFile(join(item.identity.paths.reflection, "active.lock"), "utf8"))
     const before = await snapshot(item.runDir, ["ledger.json", "final.json", "prelaunch.json"])
     const launched: string[] = []
 
     // when
     await reconcileReflectionRuns({ identity: item.identity, reservation: item.store, launch: (run) => launched.push(run.runId), ...deadLauncher() })
+    await reconcileReflectionRuns({ identity: item.identity, reservation: item.store, launch: (run) => launched.push(run.runId), ...deadLauncher() })
 
     // then
-    expect(await quarantine(item)).toMatchObject({
-      version: 1, runId: "run-orphan", kind: "reflection", trigger: "step-count",
-      generation: item.ledger.startedAt, reason: "invalid_generation_timestamps",
-    })
-    expect(JSON.parse(await readFile(join(item.runDir, "reservation.quarantined.json"), "utf8"))).toEqual(activeBefore)
+    expect(existsSync(join(item.runDir, "quarantined.json"))).toBe(false)
     expect(await snapshot(item.runDir, ["ledger.json", "final.json", "prelaunch.json"])).toEqual(before)
-    expect((await receipts(item)).map((receipt) => [receipt.event, receipt.reason])).toEqual([["quarantined", "invalid_generation_timestamps"]])
+    expect((await receipts(item)).filter((receipt) => receipt.kind !== "facts" && receipt.runId === "run-orphan").map((receipt) => receipt.event)).toEqual(["merged"])
     expect(launched).toEqual(["run-pending"])
+  }, 30_000)
+
+  test("#given an unparseable ledger whose recorded supervisor is still alive under a dead launcher #when reconciled #then nothing is quarantined and the reservation stays", async () => {
+    // given
+    const item = await fixture()
+    const sleeper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: "ignore" })
+    sleepers.push(sleeper)
+    await writeFile(join(item.runDir, "ledger.json"), JSON.stringify({ ...item.ledger, mergePolicy: "future-policy", launching: false, pid: sleeper.pid, processStart: null }))
+
+    // when
+    const results = await reconcileReflectionRuns({ identity: item.identity, reservation: item.store, ...deadLauncher(), getPidLiveness: (pid) => pid === sleeper.pid ? "alive" : "dead" })
+
+    // then
+    expect(results).toEqual([])
+    expect(existsSync(join(item.runDir, "quarantined.json"))).toBe(false)
+    expect((await item.store.readState()).active?.runId).toBe("run-orphan")
+  }, 30_000)
+
+  test("#given a run dir with no prelaunch or ledger still inside the launch window under a dead launcher #when reconciled #then it is left alone", async () => {
+    // given
+    const item = await fixture()
+    await rm(join(item.runDir, "ledger.json"))
+    await rm(join(item.runDir, "prelaunch.json"))
+    const recent = new Date(deadLauncher().now() - 30_000)
+    await utimes(item.runDir, recent, recent)
+
+    // when
+    const results = await reconcileReflectionRuns({ identity: item.identity, reservation: item.store, ...deadLauncher() })
+
+    // then
+    expect(results).toEqual([])
+    expect(existsSync(join(item.runDir, "quarantined.json"))).toBe(false)
+    expect((await item.store.readState()).active?.runId).toBe("run-orphan")
   }, 30_000)
 
   test("#given corrupt terminal timestamps under a launcher on another host #when reconciled #then nothing is quarantined and the reservation stays", async () => {

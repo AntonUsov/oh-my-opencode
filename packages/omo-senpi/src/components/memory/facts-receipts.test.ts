@@ -13,6 +13,7 @@ import {
 } from "@oh-my-opencode/memory-core"
 
 import { FactsTerminalWrites } from "./facts-terminal-writes"
+import { reconcileFactsRuns } from "./facts-run-reconcile"
 import { reserveFactsRunDir } from "./facts-run-storage"
 import type { MemoryReceiptsPort } from "./receipts-port"
 import { writeRunJsonAtomic } from "./worker/run-artifacts"
@@ -153,5 +154,68 @@ describe("facts receipts", () => {
     // then
     expect(runDir).toBeDefined()
     expect(await read(paths)).toMatchObject([{ kind: "facts", batchId: "batch-launch", event: "launched" }])
+  })
+})
+
+describe("facts receipt recovery", () => {
+  const reconcile = (paths: MemoryIdentityPaths) => reconcileFactsRuns({
+    factsDir: paths.facts,
+    now: () => NOW,
+    finalize: async () => { throw new Error("a terminal run is never finalized again") },
+    fail: async () => { throw new Error("a terminal run is never failed again") },
+    abandon: async () => { throw new Error("a terminal run is never abandoned again") },
+    receiptsDir: paths.runtime,
+  })
+
+  test("#given a committed run whose receipt write was lost #when facts reconcile twice #then exactly one committed receipt is rebuilt from final.json", async () => {
+    // given
+    const { paths, runDir, batchId } = await factsRun()
+    const lost: MemoryReceiptsPort = { append: async () => { throw new Error("receipt write lost") } }
+    await writes(paths, lost).succeed(runDir, "facts-abc-1", "committed", { entries: [], targets: [] }, "f00d")
+    const afterLoss = await read(paths)
+
+    // when
+    await reconcile(paths)
+    await reconcile(paths)
+
+    // then
+    expect(afterLoss).toEqual([])
+    expect((await read(paths)).map((receipt) => [receipt.kind === "facts" ? receipt.batchId : "", receipt.event, receipt.sha])).toEqual([[batchId, "committed", "f00d"]])
+  })
+
+  test("#given a terminal run whose receipt was already written #when facts reconcile #then no second receipt appears", async () => {
+    // given
+    const { paths, runDir } = await factsRun()
+    await writes(paths).succeed(runDir, "facts-abc-1", "no_facts", { entries: [], targets: [] })
+
+    // when
+    await reconcile(paths)
+
+    // then
+    expect((await read(paths)).map((receipt) => receipt.event)).toEqual(["no_facts"])
+  })
+
+  test("#given a launched receipt write that fails #when a facts run dir is reserved #then the failure is reported to warn and the run dir is still claimed", async () => {
+    // given
+    const root = await mkdtemp(join(tmpdir(), "facts-receipts-"))
+    roots.push(root)
+    const paths = buildIdentityPaths(root, "agent-test")
+    const warnings: string[] = []
+
+    // when
+    const runDir = await reserveFactsRunDir({
+      factsDir: paths.facts,
+      locksDir: paths.locks,
+      entries: [],
+      batchId: "batch-0002",
+      launchedAt: NOW.getTime(),
+      receiptsDir: paths.runtime,
+      receipts: { append: async () => { throw new Error("disk full") } },
+      warn: (message) => warnings.push(message),
+    })
+
+    // then
+    expect(runDir).toBeDefined()
+    expect(warnings).toHaveLength(1)
   })
 })

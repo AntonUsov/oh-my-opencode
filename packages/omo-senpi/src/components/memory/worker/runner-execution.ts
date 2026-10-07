@@ -105,6 +105,7 @@ export async function executeReflectionRun(input: {
           sandbox: options.sandbox,
           supervisorPath: options.supervisorPath,
           receiptsDir: options.identity.paths.runtime,
+          receiptWarn: (message, fields) => options.logger?.warn(message, fields),
         })
       },
     })

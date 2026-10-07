@@ -16,7 +16,7 @@ import { readRunJson, writeRunJsonAtomic } from "./worker/run-artifacts"
 import { cleanupTerminalFactsRun, type RemoveRunArtifact } from "./facts-run-cleanup"
 import type { FactsQueuedKey } from "./facts-failure-recording"
 import type { FactsFinalRecord, FactsLaunchResult, FactsRunLedger } from "./facts-runner-types"
-import { emitMemoryReceipt, factsReceipt, type MemoryReceiptsPort } from "./receipts-port"
+import { emitMemoryReceipt, factsReceipt, type MemoryReceiptsPort, type ReceiptWarn } from "./receipts-port"
 
 export const FACTS_DEADLINE_MS = 15 * 60_000
 const DEFAULT_GRACE_MS = 5_000
@@ -39,6 +39,7 @@ export async function reserveFactsRunDir(options: {
   readonly lockWaitMs?: number
   readonly receiptsDir?: string
   readonly receipts?: MemoryReceiptsPort
+  readonly warn?: ReceiptWarn
 }): Promise<string | undefined> {
   const record = await createLockRecord("facts-runs", { runId: options.batchId })
   const runDir = await withLock(
@@ -48,7 +49,7 @@ export async function reserveFactsRunDir(options: {
     { waitTimeoutMs: options.lockWaitMs ?? RUNS_LOCK_WAIT_MS },
   )
   if (runDir !== undefined && options.receiptsDir !== undefined) {
-    await emitMemoryReceipt(options.receiptsDir, factsReceipt(options.batchId, "launched"), options.receipts)
+    await emitMemoryReceipt(options.receiptsDir, factsReceipt(options.batchId, "launched"), options.receipts, options.warn)
   }
   return runDir
 }

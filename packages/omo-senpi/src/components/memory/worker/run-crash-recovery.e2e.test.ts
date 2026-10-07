@@ -176,7 +176,8 @@ async function expectEvidencePreserved(item: Hermetic, before: Map<string, strin
 interface Row {
   readonly name: string
   readonly point: MemoryKillPoint
-  readonly child?: "commit" | "noop"
+  readonly child?: "commit" | "noop" | "commit-fail" | "commit-hang"
+  readonly deadlineMs?: number
   readonly killSelf?: boolean
   readonly killed: "launcher" | "supervisor" | "supervisor-and-launcher"
   readonly terminal: { readonly file: "abandoned.json"; readonly reason: string } | { readonly file: "final.json"; readonly outcome: string; readonly reason?: string }
@@ -194,6 +195,8 @@ const ROWS: readonly Row[] = [
   { name: "after-merge", point: "after-merge", killed: "launcher", terminal: { file: "final.json", outcome: "merged" }, events: ["recovered", "merged"], commits: 1 },
   { name: "before-receipt", point: "before-receipt", killed: "launcher", terminal: { file: "final.json", outcome: "merged" }, events: ["merged"], commits: 1 },
   { name: "after-child-exit control: the child committed nothing", point: "after-child-exit", child: "noop", killed: "supervisor", terminal: { file: "final.json", outcome: "failed", reason: "supervisor_failed" }, events: ["failed"], commits: 0 },
+  { name: "after-child-exit: the child committed then exited 1", point: "after-child-exit", child: "commit-fail", killed: "supervisor", terminal: { file: "final.json", outcome: "failed", reason: "supervisor_failed" }, events: ["failed"], commits: 0 },
+  { name: "after-child-exit: the child committed then ran past its deadline", point: "after-child-exit", child: "commit-hang", deadlineMs: 4_000, killed: "supervisor", terminal: { file: "final.json", outcome: "failed", reason: "supervisor_failed" }, events: ["failed"], commits: 0 },
 ]
 
 describe("memory run crash recovery at every kill point", () => {
@@ -204,6 +207,7 @@ describe("memory run crash recovery at every kill point", () => {
       const run = await drive(item, [
         "--run",
         ...(row.child === undefined ? [] : ["--child", row.child]),
+        ...(row.deadlineMs === undefined ? [] : ["--deadline-ms", String(row.deadlineMs)]),
         ...(row.killSelf === true ? ["--kill-self-after-supervisor-exit"] : []),
       ], row.point)
       await recordProcesses(item)

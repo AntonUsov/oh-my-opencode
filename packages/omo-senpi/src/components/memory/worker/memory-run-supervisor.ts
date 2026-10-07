@@ -7,9 +7,12 @@ import { fileURLToPath } from "node:url"
 import { maybeKillAt } from "@oh-my-opencode/memory-core"
 
 import {
+  CHILD_EXIT_FILENAME,
   readRunJson,
   unlinkRunArtifact,
   updateRunLedger,
+  writeRunJsonAtomic,
+  type RunChildExit,
   type RunLaunchManifest,
   type RunOutcome,
 } from "./run-artifacts"
@@ -84,6 +87,17 @@ async function runChildBootstrap(runDir: string): Promise<void> {
     cancelTerm()
     cancelKill()
   })
+  // Durable before it is reported: a supervisor that dies after this point loses the pipe message,
+  // and recovery may only trust a tip whose child is recorded as having finished cleanly in time.
+  await writeRunJsonAtomic(join(runDir, CHILD_EXIT_FILENAME), {
+    version: 1,
+    runId: manifest.runId,
+    attempt: manifest.attempt,
+    code: status.code,
+    signal: status.signal,
+    finishedAt: new Date().toISOString(),
+    timedOut: readSupervisorClockNow() >= manifest.hardDeadlineAt,
+  } satisfies RunChildExit)
   writeBootstrapStatus(status)
 }
 
