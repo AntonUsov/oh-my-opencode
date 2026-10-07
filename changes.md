@@ -1,3 +1,7 @@
+## 2026-10-07 - Adopt senpi 2026.10.10-5
+
+Every `@code-yeongyu/senpi` pin moves from 2026.10.10-4 to 2026.10.10-5: the root devDependency, `omo-native` and its provider map comment, the `omo-senpi` and `senpi-task` peer and dev pins (with their `senpi-tui` and `senpi-ai` aliases), the pin tests and the engine named in `senpi-task`'s coverage test. The engine carries the attach permission-preset fix (senpi#2823), the streaming scroll fix (senpi#2836), the codemode stop/require/name-shadowing and live-row fixes, and the `show_html_page` tool. The generated plugin bundles are regenerated for it on Linux.
+
 ## 2026-10-07 - The memory file list in the prompt is bounded by recency, count and bytes (#9687)
 
 `<external_projection>`, the list of memory files outside `system/` at the end of the compiled
